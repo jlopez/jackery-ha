@@ -1,0 +1,77 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Jackery Account",
+        "description": "Enter your Jackery app credentials.",
+        "data": {
+          "email": "Email",
+          "password": "Password"
+        }
+      }
+    },
+    "error": {
+      "invalid_auth": "Invalid email or password.",
+      "cannot_connect": "Unable to connect to Jackery servers.",
+      "no_devices": "No devices found on this account.",
+      "unknown": "An unexpected error occurred."
+    },
+    "abort": {
+      "already_configured": "This account is already configured."
+    }
+  },
+  "entity": {
+    "sensor": {
+      "battery": { "name": "Battery" },
+      "battery_temperature": { "name": "Battery temperature" },
+      "battery_state": {
+        "name": "Battery state",
+        "state": {
+          "idle": "Idle",
+          "charging": "Charging",
+          "discharging": "Discharging"
+        }
+      },
+      "input_power": { "name": "Input power" },
+      "output_power": { "name": "Output power" },
+      "time_to_full": { "name": "Time to full" },
+      "time_remaining": { "name": "Time remaining" },
+      "ac_input_power": { "name": "AC input power" },
+      "car_input_power": { "name": "Car input power" },
+      "ac_voltage": { "name": "AC voltage" },
+      "ac_frequency": { "name": "AC frequency" },
+      "ac_power": { "name": "AC power" },
+      "ac_power_secondary": { "name": "AC power (secondary)" },
+      "ac_socket_power": { "name": "AC socket power" },
+      "error_code": { "name": "Error code" },
+      "power_mode_battery": { "name": "Power mode battery" },
+      "total_temperature": { "name": "Total temperature" },
+      "system_status": { "name": "System status" }
+    },
+    "binary_sensor": {
+      "wireless_charging": { "name": "Wireless charging" },
+      "temperature_alarm": { "name": "Temperature alarm" },
+      "power_alarm": { "name": "Power alarm" }
+    },
+    "switch": {
+      "ac_output": { "name": "AC output" },
+      "dc_output": { "name": "DC output" },
+      "usb_output": { "name": "USB output" },
+      "car_output": { "name": "Car output" },
+      "ac_input": { "name": "AC input" },
+      "dc_input": { "name": "DC input" },
+      "super_fast_charge": { "name": "Super fast charge" },
+      "ups_mode": { "name": "UPS mode" }
+    },
+    "select": {
+      "light_mode": { "name": "Light mode" },
+      "charge_speed": { "name": "Charge speed" },
+      "battery_protection": { "name": "Battery protection" }
+    },
+    "number": {
+      "auto_shutdown": { "name": "Auto shutdown" },
+      "energy_saving": { "name": "Energy saving" },
+      "screen_timeout": { "name": "Screen timeout" }
+    }
+  }
+}
