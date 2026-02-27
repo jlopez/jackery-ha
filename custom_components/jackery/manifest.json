@@ -1,0 +1,12 @@
+{
+  "domain": "jackery",
+  "name": "Jackery Power Stations",
+  "codeowners": ["@jlopez"],
+  "config_flow": true,
+  "documentation": "https://github.com/jlopez/jackery-ha",
+  "integration_type": "hub",
+  "iot_class": "cloud_push",
+  "issue_tracker": "https://github.com/jlopez/jackery-ha/issues",
+  "requirements": ["socketry>=0.1.1"],
+  "version": "0.1.0"
+}
