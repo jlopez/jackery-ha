@@ -233,9 +233,8 @@ async def test_diagnostics_includes_client_connected_false():
 
 async def test_diagnostics_mqtt_connected_true():
     coordinator = _make_coordinator()
-    client = MagicMock()
-    client._active_mqtt = MagicMock()  # Non-None means MQTT is active
-    coordinator.client = client
+    coordinator.client = MagicMock()
+    coordinator._subscription = MagicMock()  # Non-None means MQTT subscription is active
     entry = MagicMock()
     entry.data = {CONF_EMAIL: "user@example.com", CONF_PASSWORD: "secret"}
     entry.runtime_data = coordinator

@@ -72,10 +72,7 @@ async def async_get_config_entry_diagnostics(
     data["device_count"] = len(coordinator.devices)
 
     # Include MQTT connection status
-    client = coordinator.client
-    data["client_connected"] = client is not None
-    data["mqtt_connected"] = (
-        getattr(client, "_active_mqtt", None) is not None if client is not None else False
-    )
+    data["client_connected"] = coordinator.client is not None
+    data["mqtt_connected"] = coordinator.mqtt_connected
 
     return data

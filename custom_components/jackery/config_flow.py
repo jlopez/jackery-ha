@@ -5,7 +5,7 @@ from __future__ import annotations
 import logging
 from typing import Any
 
-import requests
+import aiohttp
 import voluptuous as vol
 from homeassistant.config_entries import ConfigFlow, ConfigFlowResult
 from socketry import Client
@@ -32,13 +32,12 @@ class JackeryConfigFlow(ConfigFlow, domain=DOMAIN):  # type: ignore[call-arg,mis
             password = user_input[CONF_PASSWORD]
 
             try:
-                client = await self.hass.async_add_executor_job(Client.login, email, password)
-                # login() already fetches devices internally; read from cached creds
-                # to avoid a redundant HTTP round-trip.
-                devices: list[dict[str, object]] = client._creds.get("devices", [])
+                client = await Client.login(email, password)
+                # login() fetches devices internally; read from the cached list.
+                devices = client.devices
             except RuntimeError:
                 errors["base"] = "invalid_auth"
-            except (requests.exceptions.RequestException, TimeoutError, OSError):
+            except (aiohttp.ClientError, TimeoutError, OSError):
                 errors["base"] = "cannot_connect"
             except Exception:
                 _LOGGER.exception("Unexpected error during Jackery login")

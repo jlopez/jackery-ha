@@ -7,7 +7,9 @@ authors = [
     { name = "Jesus Lopez", email = "jesus@jesusla.com" }
 ]
 requires-python = ">=3.12"
-dependencies = ["socketry>=0.1.1"]
+dependencies = [
+    "socketry>=0.2.0",
+]
 
 [dependency-groups]
 dev = [
