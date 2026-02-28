@@ -68,15 +68,8 @@ class JackeryEntity(CoordinatorEntity[JackeryCoordinator]):  # type: ignore[misc
 
     def _find_device(self) -> dict[str, object] | None:
         """Find the device dict for this entity's serial number."""
-        coordinator: JackeryCoordinator = self.coordinator
-        for dev in coordinator.devices:
+        devices: list[dict[str, object]] = self.coordinator.devices
+        for dev in devices:
             if dev.get("devSn") == self._device_sn:
                 return dev
-        return None
-
-    def _device_index(self) -> int | None:
-        """Return the index of this entity's device in the coordinator device list."""
-        for idx, dev in enumerate(self.coordinator.devices):
-            if dev.get("devSn") == self._device_sn:
-                return idx
         return None

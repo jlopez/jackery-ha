@@ -44,7 +44,7 @@ async def test_async_setup_entry():
     fake_props = {"properties": {"rb": 80}}
 
     mock_client = MagicMock()
-    mock_client.fetch_devices = AsyncMock(return_value=fake_devices)
+    mock_client.devices = fake_devices
     mock_client.subscribe = AsyncMock(return_value=MagicMock())
 
     device_mock = MagicMock()
@@ -63,15 +63,12 @@ async def test_async_setup_entry():
 
 
 async def test_async_unload_entry():
-    """Test that async_unload_entry stops the MQTT subscription and unloads platforms."""
+    """Test that async_unload_entry calls coordinator.async_unload() and unloads platforms."""
     hass = MagicMock()
     hass.config_entries.async_unload_platforms = AsyncMock(return_value=True)
 
-    mock_sub = MagicMock()
-    mock_sub.stop = AsyncMock()
-
     coordinator = MagicMock()
-    coordinator._subscription = mock_sub
+    coordinator.async_unload = AsyncMock()
 
     entry = MagicMock()
     entry.runtime_data = coordinator
@@ -79,22 +76,5 @@ async def test_async_unload_entry():
     result = await async_unload_entry(hass, entry)
 
     assert result is True
-    mock_sub.stop.assert_called_once()
-    hass.config_entries.async_unload_platforms.assert_called_once_with(entry, PLATFORMS)
-
-
-async def test_async_unload_entry_no_subscription():
-    """Test that async_unload_entry handles missing subscription gracefully."""
-    hass = MagicMock()
-    hass.config_entries.async_unload_platforms = AsyncMock(return_value=True)
-
-    coordinator = MagicMock()
-    coordinator._subscription = None
-
-    entry = MagicMock()
-    entry.runtime_data = coordinator
-
-    result = await async_unload_entry(hass, entry)
-
-    assert result is True
+    coordinator.async_unload.assert_called_once()
     hass.config_entries.async_unload_platforms.assert_called_once_with(entry, PLATFORMS)

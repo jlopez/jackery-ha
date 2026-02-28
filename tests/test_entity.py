@@ -189,20 +189,3 @@ def test_prop_returns_none_when_coordinator_data_is_none():
     coordinator.data = None
     entity = _make_entity(coordinator=coordinator, device_sn="SN001")
     assert entity._prop("rb") is None
-
-
-def test_device_index_returns_correct_index():
-    entity = _make_entity(device_sn="SN001")
-    assert entity._device_index() == 0
-
-
-def test_device_index_returns_correct_index_second_device():
-    entity = _make_entity(device_sn="SN002")
-    assert entity._device_index() == 1
-
-
-def test_device_index_returns_none_when_device_not_found():
-    coordinator = _make_coordinator()
-    coordinator.devices = []
-    entity = _make_entity(coordinator=coordinator, device_sn="SN001")
-    assert entity._device_index() is None
