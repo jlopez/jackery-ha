@@ -2,10 +2,10 @@
 
 from __future__ import annotations
 
-from unittest.mock import MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
+import aiohttp
 import pytest
-import requests
 
 from custom_components.jackery.config_flow import JackeryConfigFlow
 from custom_components.jackery.const import CONF_EMAIL, CONF_PASSWORD
@@ -15,13 +15,7 @@ from custom_components.jackery.const import CONF_EMAIL, CONF_PASSWORD
 
 def _make_hass() -> MagicMock:
     """Create a minimal mock HomeAssistant instance."""
-    hass = MagicMock()
-
-    async def _add_executor_job(func, *args):
-        return func(*args)
-
-    hass.async_add_executor_job = _add_executor_job
-    return hass
+    return MagicMock()
 
 
 def _make_flow(hass: MagicMock) -> JackeryConfigFlow:
@@ -51,6 +45,7 @@ FAKE_DEVICES: list[dict[str, object]] = [
 def mock_client() -> MagicMock:
     """Create a mock socketry Client."""
     client = MagicMock()
+    client.devices = FAKE_DEVICES
     client._creds = {"userId": "user-42", "devices": FAKE_DEVICES}
     return client
 
@@ -69,7 +64,7 @@ async def test_successful_flow(hass, mock_client):
 
     with patch(
         "custom_components.jackery.config_flow.Client.login",
-        return_value=mock_client,
+        new=AsyncMock(return_value=mock_client),
     ):
         result = await flow.async_step_user(user_input=VALID_INPUT)
 
@@ -96,7 +91,7 @@ async def test_invalid_auth(hass):
 
     with patch(
         "custom_components.jackery.config_flow.Client.login",
-        side_effect=RuntimeError("Login failed: invalid credentials"),
+        new=AsyncMock(side_effect=RuntimeError("Login failed: invalid credentials")),
     ):
         result = await flow.async_step_user(user_input=VALID_INPUT)
 
@@ -104,13 +99,13 @@ async def test_invalid_auth(hass):
     assert result["errors"]["base"] == "invalid_auth"
 
 
-async def test_cannot_connect_request_exception(hass):
-    """Test network error (RequestException) shows cannot_connect."""
+async def test_cannot_connect_client_error(hass):
+    """Test network error (aiohttp.ClientError) shows cannot_connect."""
     flow = _make_flow(hass)
 
     with patch(
         "custom_components.jackery.config_flow.Client.login",
-        side_effect=requests.exceptions.ConnectionError("Connection refused"),
+        new=AsyncMock(side_effect=aiohttp.ClientConnectionError("Connection refused")),
     ):
         result = await flow.async_step_user(user_input=VALID_INPUT)
 
@@ -124,7 +119,7 @@ async def test_cannot_connect_timeout(hass):
 
     with patch(
         "custom_components.jackery.config_flow.Client.login",
-        side_effect=TimeoutError("Connection timed out"),
+        new=AsyncMock(side_effect=TimeoutError("Connection timed out")),
     ):
         result = await flow.async_step_user(user_input=VALID_INPUT)
 
@@ -138,7 +133,7 @@ async def test_cannot_connect_os_error(hass):
 
     with patch(
         "custom_components.jackery.config_flow.Client.login",
-        side_effect=OSError("Network unreachable"),
+        new=AsyncMock(side_effect=OSError("Network unreachable")),
     ):
         result = await flow.async_step_user(user_input=VALID_INPUT)
 
@@ -149,11 +144,11 @@ async def test_cannot_connect_os_error(hass):
 async def test_no_devices(hass, mock_client):
     """Test empty device list shows no_devices error."""
     flow = _make_flow(hass)
-    mock_client._creds["devices"] = []
+    mock_client.devices = []
 
     with patch(
         "custom_components.jackery.config_flow.Client.login",
-        return_value=mock_client,
+        new=AsyncMock(return_value=mock_client),
     ):
         result = await flow.async_step_user(user_input=VALID_INPUT)
 
@@ -167,7 +162,7 @@ async def test_unknown_error(hass):
 
     with patch(
         "custom_components.jackery.config_flow.Client.login",
-        side_effect=ValueError("Something weird happened"),
+        new=AsyncMock(side_effect=ValueError("Something weird happened")),
     ):
         result = await flow.async_step_user(user_input=VALID_INPUT)
 
@@ -192,7 +187,7 @@ async def test_duplicate_account(hass, mock_client):
     with (
         patch(
             "custom_components.jackery.config_flow.Client.login",
-            return_value=mock_client,
+            new=AsyncMock(return_value=mock_client),
         ),
         pytest.raises(AbortFlow, match="already_configured"),
     ):

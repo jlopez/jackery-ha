@@ -33,7 +33,8 @@ async def async_setup_entry(hass: HomeAssistant, entry: JackeryConfigEntry) -> b
 async def async_unload_entry(hass: HomeAssistant, entry: JackeryConfigEntry) -> bool:
     """Unload a Jackery config entry."""
     coordinator: JackeryCoordinator = entry.runtime_data
-    coordinator.client = None
+    if coordinator._subscription is not None:
+        await coordinator._subscription.stop()
 
     result: bool = await hass.config_entries.async_unload_platforms(entry, PLATFORMS)
     return result

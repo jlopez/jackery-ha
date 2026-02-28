@@ -2,10 +2,10 @@
 
 from __future__ import annotations
 
-from unittest.mock import MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
+import aiohttp
 import pytest
-import requests
 
 from custom_components.jackery.const import CONF_EMAIL, CONF_PASSWORD
 from custom_components.jackery.coordinator import JackeryCoordinator
@@ -41,38 +41,39 @@ def _make_entry() -> MagicMock:
 
 
 def _make_hass() -> MagicMock:
-    hass = MagicMock()
+    return MagicMock()
 
-    async def _add_executor_job(func, *args):
-        return func(*args)
 
-    hass.async_add_executor_job = _add_executor_job
-    return hass
+def _make_mock_subscription() -> MagicMock:
+    sub = MagicMock()
+    sub.stop = AsyncMock()
+    return sub
 
 
 def _make_mock_client(
     devices: list[dict[str, object]] | None = None,
-    props_by_index: dict[int, dict[str, object]] | None = None,
+    props_by_sn: dict[str, dict[str, object]] | None = None,
 ) -> MagicMock:
+    """Build a mock Client with async fetch_devices, subscribe, and device()."""
     client = MagicMock()
-    client.fetch_devices.return_value = devices or FAKE_DEVICES
+    client.fetch_devices = AsyncMock(return_value=devices or FAKE_DEVICES)
 
-    # Track which device is selected and return correct properties
-    selected_index: list[int] = [0]
+    default_props: dict[str, dict[str, object]] = {
+        "SN001": FAKE_PROPS_SN001,
+        "SN002": FAKE_PROPS_SN002,
+    }
+    actual_props = props_by_sn or default_props
 
-    def select_device(idx: int) -> dict[str, object]:
-        selected_index[0] = idx
-        devs = devices or FAKE_DEVICES
-        return devs[idx]
+    def make_device(sn: str) -> MagicMock:
+        device_mock = MagicMock()
+        device_mock.get_all_properties = AsyncMock(return_value=actual_props.get(sn, {}))
+        return device_mock
 
-    default_props = {0: FAKE_PROPS_SN001, 1: FAKE_PROPS_SN002}
-    actual_props = props_by_index or default_props
+    client.device.side_effect = make_device
 
-    def get_all_properties() -> dict[str, object]:
-        return actual_props[selected_index[0]]
-
-    client.select_device.side_effect = select_device
-    client.get_all_properties.side_effect = get_all_properties
+    # subscribe returns a Subscription mock; capture callback/on_disconnect
+    # for tests that need to exercise them directly.
+    client.subscribe = AsyncMock(return_value=_make_mock_subscription())
 
     return client
 
@@ -90,7 +91,7 @@ async def test_first_refresh_populates_data():
 
     with patch(
         "custom_components.jackery.coordinator.Client.login",
-        return_value=mock_client,
+        new=AsyncMock(return_value=mock_client),
     ):
         await coordinator.async_config_entry_first_refresh()
 
@@ -112,12 +113,161 @@ async def test_first_refresh_stores_client_and_devices():
 
     with patch(
         "custom_components.jackery.coordinator.Client.login",
-        return_value=mock_client,
+        new=AsyncMock(return_value=mock_client),
     ):
         await coordinator.async_config_entry_first_refresh()
 
     assert coordinator.client is mock_client
     assert coordinator.devices == FAKE_DEVICES
+
+
+async def test_first_refresh_starts_mqtt_subscription():
+    """First refresh should start the MQTT subscription."""
+    hass = _make_hass()
+    entry = _make_entry()
+    mock_client = _make_mock_client()
+
+    coordinator = JackeryCoordinator(hass, entry)
+
+    with patch(
+        "custom_components.jackery.coordinator.Client.login",
+        new=AsyncMock(return_value=mock_client),
+    ):
+        await coordinator.async_config_entry_first_refresh()
+
+    mock_client.subscribe.assert_called_once()
+    assert coordinator._subscription is not None
+    assert coordinator.mqtt_connected is True
+
+
+async def test_mqtt_callback_merges_properties():
+    """MQTT callback should merge pushed properties into coordinator data and notify."""
+    hass = _make_hass()
+    entry = _make_entry()
+    mock_client = _make_mock_client()
+
+    # Capture the callback passed to subscribe
+    captured_callback = None
+
+    async def mock_subscribe(callback, *, on_disconnect=None):
+        nonlocal captured_callback
+        captured_callback = callback
+        return _make_mock_subscription()
+
+    mock_client.subscribe = mock_subscribe
+
+    coordinator = JackeryCoordinator(hass, entry)
+
+    with patch(
+        "custom_components.jackery.coordinator.Client.login",
+        new=AsyncMock(return_value=mock_client),
+    ):
+        await coordinator.async_config_entry_first_refresh()
+
+    assert captured_callback is not None
+
+    # Simulate an MQTT push update for SN001
+    await captured_callback("SN001", {"rb": 95, "op": 10})
+
+    assert coordinator.data["SN001"]["rb"] == 95
+    assert coordinator.data["SN001"]["op"] == 10
+    # Other keys should be preserved
+    assert coordinator.data["SN001"]["bt"] == 250
+
+
+async def test_mqtt_callback_adds_new_device():
+    """MQTT callback should add a new device entry if SN is not yet in coordinator data."""
+    hass = _make_hass()
+    entry = _make_entry()
+    mock_client = _make_mock_client()
+
+    captured_callback = None
+
+    async def mock_subscribe(callback, *, on_disconnect=None):
+        nonlocal captured_callback
+        captured_callback = callback
+        return _make_mock_subscription()
+
+    mock_client.subscribe = mock_subscribe
+
+    coordinator = JackeryCoordinator(hass, entry)
+
+    with patch(
+        "custom_components.jackery.coordinator.Client.login",
+        new=AsyncMock(return_value=mock_client),
+    ):
+        await coordinator.async_config_entry_first_refresh()
+
+    assert captured_callback is not None
+
+    # Push an update for a device not in the initial HTTP data
+    await captured_callback("SN999", {"rb": 50})
+
+    assert "SN999" in coordinator.data
+    assert coordinator.data["SN999"]["rb"] == 50
+
+
+async def test_mqtt_callback_ignored_when_data_is_none():
+    """MQTT callback should be a no-op when coordinator data is None."""
+    hass = _make_hass()
+    entry = _make_entry()
+    mock_client = _make_mock_client()
+
+    captured_callback = None
+
+    async def mock_subscribe(callback, *, on_disconnect=None):
+        nonlocal captured_callback
+        captured_callback = callback
+        return _make_mock_subscription()
+
+    mock_client.subscribe = mock_subscribe
+
+    coordinator = JackeryCoordinator(hass, entry)
+
+    with patch(
+        "custom_components.jackery.coordinator.Client.login",
+        new=AsyncMock(return_value=mock_client),
+    ):
+        await coordinator.async_config_entry_first_refresh()
+
+    assert captured_callback is not None
+
+    # Manually clear data to simulate the pre-setup state
+    coordinator.data = None
+
+    # Should not raise
+    await captured_callback("SN001", {"rb": 99})
+
+
+async def test_disconnect_callback_logs_warning():
+    """on_disconnect callback should log a warning."""
+    hass = _make_hass()
+    entry = _make_entry()
+    mock_client = _make_mock_client()
+
+    captured_disconnect = None
+
+    async def mock_subscribe(callback, *, on_disconnect=None):
+        nonlocal captured_disconnect
+        captured_disconnect = on_disconnect
+        return _make_mock_subscription()
+
+    mock_client.subscribe = mock_subscribe
+
+    coordinator = JackeryCoordinator(hass, entry)
+
+    with patch(
+        "custom_components.jackery.coordinator.Client.login",
+        new=AsyncMock(return_value=mock_client),
+    ):
+        await coordinator.async_config_entry_first_refresh()
+
+    assert captured_disconnect is not None
+
+    # Calling disconnect should not raise; warning is logged internally
+    with patch("custom_components.jackery.coordinator._LOGGER") as mock_logger:
+        await captured_disconnect()
+        mock_logger.warning.assert_called_once()
 
 
 async def test_subsequent_poll_fetches_fresh_data():
@@ -130,17 +280,19 @@ async def test_subsequent_poll_fetches_fresh_data():
 
     with patch(
         "custom_components.jackery.coordinator.Client.login",
-        return_value=mock_client,
+        new=AsyncMock(return_value=mock_client),
     ):
         await coordinator.async_config_entry_first_refresh()
 
-    # Change mock to return updated data on second poll
+    # Update mock to return new values
     updated_props: dict[str, object] = {
         "device": {"devSn": "SN001"},
         "properties": {"rb": 90, "bt": 240, "ip": 50, "op": 25},
     }
-    mock_client.get_all_properties.side_effect = None
-    mock_client.get_all_properties.return_value = updated_props
+    mock_client.device.side_effect = None
+    device_mock = MagicMock()
+    device_mock.get_all_properties = AsyncMock(return_value=updated_props)
+    mock_client.device.return_value = device_mock
 
     await coordinator.async_request_refresh()
 
@@ -157,7 +309,7 @@ async def test_auth_failure_on_login_raises_config_entry_auth_failed():
     with (
         patch(
             "custom_components.jackery.coordinator.Client.login",
-            side_effect=RuntimeError("Login failed: invalid credentials"),
+            new=AsyncMock(side_effect=RuntimeError("Login failed: invalid credentials")),
         ),
         pytest.raises(_ConfigEntryAuthFailed),
     ):
@@ -168,19 +320,21 @@ async def test_auth_failure_on_fetch_raises_config_entry_auth_failed():
     """RuntimeError during property fetch should raise ConfigEntryAuthFailed."""
     hass = _make_hass()
     entry = _make_entry()
-    mock_client = MagicMock()
-    mock_client.fetch_devices.return_value = FAKE_DEVICES
-    mock_client.select_device.return_value = FAKE_DEVICES[0]
-    mock_client.get_all_properties.side_effect = RuntimeError(
-        "Property fetch failed: token expired"
+    mock_client = _make_mock_client()
+
+    device_mock = MagicMock()
+    device_mock.get_all_properties = AsyncMock(
+        side_effect=RuntimeError("Property fetch failed: token expired")
     )
+    mock_client.device.side_effect = None
+    mock_client.device.return_value = device_mock
 
     coordinator = JackeryCoordinator(hass, entry)
 
     with (
         patch(
             "custom_components.jackery.coordinator.Client.login",
-            return_value=mock_client,
+            new=AsyncMock(return_value=mock_client),
         ),
         pytest.raises(_ConfigEntryAuthFailed),
     ):
@@ -197,7 +351,7 @@ async def test_transient_error_on_login_raises_update_failed():
     with (
         patch(
             "custom_components.jackery.coordinator.Client.login",
-            side_effect=requests.exceptions.ConnectionError("Connection refused"),
+            new=AsyncMock(side_effect=aiohttp.ClientConnectionError("Connection refused")),
         ),
         pytest.raises(_UpdateFailed),
     ):
@@ -208,17 +362,19 @@ async def test_transient_error_on_fetch_raises_update_failed():
     """Network error during property fetch should raise UpdateFailed."""
     hass = _make_hass()
     entry = _make_entry()
-    mock_client = MagicMock()
-    mock_client.fetch_devices.return_value = FAKE_DEVICES
-    mock_client.select_device.return_value = FAKE_DEVICES[0]
-    mock_client.get_all_properties.side_effect = requests.exceptions.Timeout("Request timed out")
+    mock_client = _make_mock_client()
+
+    device_mock = MagicMock()
+    device_mock.get_all_properties = AsyncMock(side_effect=aiohttp.ServerTimeoutError())
+    mock_client.device.side_effect = None
+    mock_client.device.return_value = device_mock
 
     coordinator = JackeryCoordinator(hass, entry)
 
     with (
         patch(
             "custom_components.jackery.coordinator.Client.login",
-            return_value=mock_client,
+            new=AsyncMock(return_value=mock_client),
         ),
         pytest.raises(_UpdateFailed),
     ):
@@ -236,17 +392,14 @@ async def test_devices_without_sn_are_skipped():
     ]
     mock_client = _make_mock_client(
         devices=bad_devices,
-        props_by_index={
-            1: FAKE_PROPS_SN001,
-        },
+        props_by_sn={"SN001": FAKE_PROPS_SN001},
     )
-    # The device at index 0 has no SN, so select_device(0) should not be called
-    # for property fetching. We only need index 1.
+
     coordinator = JackeryCoordinator(hass, entry)
 
     with patch(
         "custom_components.jackery.coordinator.Client.login",
-        return_value=mock_client,
+        new=AsyncMock(return_value=mock_client),
     ):
         await coordinator.async_config_entry_first_refresh()
 
@@ -258,30 +411,26 @@ async def test_transient_error_on_one_device_does_not_block_others():
     """When one device fails with a transient error, the other devices should still be polled."""
     hass = _make_hass()
     entry = _make_entry()
+    mock_client = _make_mock_client()
 
     call_count: list[int] = [0]
 
-    def select_device(idx: int) -> dict[str, object]:
-        return FAKE_DEVICES[idx]
-
-    def get_all_properties() -> dict[str, object]:
+    def make_device(sn: str) -> MagicMock:
+        device_mock = MagicMock()
         call_count[0] += 1
         if call_count[0] == 1:
-            # First device fails
-            raise requests.exceptions.Timeout("Request timed out")
-        # Second device succeeds
-        return FAKE_PROPS_SN002
+            device_mock.get_all_properties = AsyncMock(side_effect=aiohttp.ServerTimeoutError())
+        else:
+            device_mock.get_all_properties = AsyncMock(return_value=FAKE_PROPS_SN002)
+        return device_mock
 
-    mock_client = MagicMock()
-    mock_client.fetch_devices.return_value = FAKE_DEVICES
-    mock_client.select_device.side_effect = select_device
-    mock_client.get_all_properties.side_effect = get_all_properties
+    mock_client.device.side_effect = make_device
 
     coordinator = JackeryCoordinator(hass, entry)
 
     with patch(
         "custom_components.jackery.coordinator.Client.login",
-        return_value=mock_client,
+        new=AsyncMock(return_value=mock_client),
     ):
         await coordinator.async_config_entry_first_refresh()
 
@@ -295,18 +444,19 @@ async def test_all_devices_transient_error_raises_update_failed():
     """When all devices fail with transient errors, UpdateFailed should be raised."""
     hass = _make_hass()
     entry = _make_entry()
+    mock_client = _make_mock_client()
 
-    mock_client = MagicMock()
-    mock_client.fetch_devices.return_value = FAKE_DEVICES
-    mock_client.select_device.side_effect = lambda idx: FAKE_DEVICES[idx]
-    mock_client.get_all_properties.side_effect = requests.exceptions.Timeout("Timed out")
+    device_mock = MagicMock()
+    device_mock.get_all_properties = AsyncMock(side_effect=aiohttp.ServerTimeoutError())
+    mock_client.device.side_effect = None
+    mock_client.device.return_value = device_mock
 
     coordinator = JackeryCoordinator(hass, entry)
 
     with (
         patch(
             "custom_components.jackery.coordinator.Client.login",
-            return_value=mock_client,
+            new=AsyncMock(return_value=mock_client),
         ),
         pytest.raises(_UpdateFailed),
     ):
@@ -322,16 +472,38 @@ async def test_properties_without_nested_properties_key():
     devices = [FAKE_DEVICES[0]]
     mock_client = _make_mock_client(
         devices=devices,
-        props_by_index={0: flat_props},
+        props_by_sn={"SN001": flat_props},
     )
 
     coordinator = JackeryCoordinator(hass, entry)
 
     with patch(
         "custom_components.jackery.coordinator.Client.login",
-        return_value=mock_client,
+        new=AsyncMock(return_value=mock_client),
     ):
         await coordinator.async_config_entry_first_refresh()
 
     assert coordinator.data["SN001"]["rb"] == 70
     assert coordinator.data["SN001"]["bt"] == 200
+
+
+async def test_subscription_stopped_on_unload():
+    """Subscription.stop() should be called when the integration is unloaded."""
+    hass = _make_hass()
+    entry = _make_entry()
+    mock_client = _make_mock_client()
+    mock_sub = _make_mock_subscription()
+    mock_client.subscribe = AsyncMock(return_value=mock_sub)
+
+    coordinator = JackeryCoordinator(hass, entry)
+
+    with patch(
+        "custom_components.jackery.coordinator.Client.login",
+        new=AsyncMock(return_value=mock_client),
+    ):
+        await coordinator.async_config_entry_first_refresh()
+
+    assert coordinator._subscription is mock_sub
+
+    await coordinator._subscription.stop()
+    mock_sub.stop.assert_called_once()
