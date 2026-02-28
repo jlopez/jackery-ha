@@ -53,14 +53,13 @@ class JackeryCoordinator(DataUpdateCoordinator[JackeryData]):  # type: ignore[mi
 
         try:
             client = await Client.login(email, password)
-            devices = await client.fetch_devices()
         except RuntimeError as err:
             raise ConfigEntryAuthFailed(str(err)) from err
         except (aiohttp.ClientError, TimeoutError, OSError) as err:
             raise UpdateFailed(f"Cannot connect to Jackery API: {err}") from err
 
         self.client = client
-        self.devices = devices
+        self.devices = client.devices
 
         self._subscription = await self.client.subscribe(
             self._handle_mqtt_update,
@@ -70,8 +69,7 @@ class JackeryCoordinator(DataUpdateCoordinator[JackeryData]):  # type: ignore[mi
     async def _async_update_data(self) -> JackeryData:
         """Fetch properties for all devices via HTTP."""
         if self.client is None:
-            await self._async_setup()
-        assert self.client is not None
+            raise UpdateFailed("Client not initialized — setup did not complete")
 
         data: JackeryData = {}
         last_error: Exception | None = None
@@ -114,6 +112,15 @@ class JackeryCoordinator(DataUpdateCoordinator[JackeryData]):  # type: ignore[mi
             self.data[device_sn] = dict(properties)
         self.async_set_updated_data(self.data)
 
+    async def async_unload(self) -> None:
+        """Stop the MQTT subscription if active."""
+        if self._subscription is not None:
+            await self._subscription.stop()
+
     async def _handle_disconnect(self) -> None:
-        """Handle MQTT disconnection — log a warning and fall back to HTTP poll."""
-        _LOGGER.warning("Jackery MQTT disconnected — falling back to HTTP poll")
+        """Handle MQTT reconnect attempt — log a warning.
+
+        Called by socketry before each reconnect backoff sleep. The HTTP poll
+        continues on its regular interval; no explicit fallback is needed.
+        """
+        _LOGGER.warning("Jackery MQTT disconnected, reconnecting…")

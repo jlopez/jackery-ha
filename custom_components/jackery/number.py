@@ -101,7 +101,7 @@ class JackeryNumberEntity(JackeryEntity, NumberEntity):  # type: ignore[misc]
         try:
             device = coordinator.client.device(sn)
             await device.set_property(slug, int_value)
-        except (KeyError, ValueError, OSError) as err:
+        except (KeyError, IndexError, ValueError, OSError) as err:
             _LOGGER.error("Failed to set %s=%s for device %s: %s", slug, int_value, sn, err)
             return
 
@@ -109,8 +109,6 @@ class JackeryNumberEntity(JackeryEntity, NumberEntity):  # type: ignore[misc]
         if coordinator.data is not None and sn in coordinator.data:
             coordinator.data[sn][prop_key] = int_value
             coordinator.async_set_updated_data(coordinator.data)
-
-        await coordinator.async_request_refresh()
 
 
 async def async_setup_entry(

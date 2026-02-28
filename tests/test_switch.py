@@ -37,10 +37,6 @@ FAKE_DATA: dict[str, dict[str, object]] = {
 }
 
 
-async def _noop_refresh() -> None:
-    """No-op replacement for async_request_refresh in tests."""
-
-
 def _make_coordinator(
     data: dict[str, dict[str, object]] | None = None,
     devices: list[dict[str, object]] | None = None,
@@ -57,8 +53,6 @@ def _make_coordinator(
     coordinator.devices = devices if devices is not None else list(FAKE_DEVICES)
     coordinator.client = MagicMock()
     coordinator.client.device.return_value.set_property = AsyncMock()
-    # Prevent async_request_refresh from calling _async_update_data
-    coordinator.async_request_refresh = _noop_refresh
     return coordinator
 
 
@@ -310,6 +304,25 @@ async def test_turn_on_noop_when_device_not_found():
 
     # Should not raise - KeyError is caught and logged
     await switch.async_turn_on()
+
+
+async def test_turn_on_noop_when_device_list_empty():
+    coordinator = _make_coordinator()
+    switch = _make_switch("oac", coordinator=coordinator)
+    _mock_client(coordinator).device.side_effect = IndexError("device list is empty")
+
+    # Should not raise - IndexError is caught and logged
+    await switch.async_turn_on()
+
+
+async def test_turn_on_does_not_trigger_refresh():
+    coordinator = _make_coordinator()
+    coordinator.async_request_refresh = AsyncMock()
+    switch = _make_switch("oac", coordinator=coordinator)
+
+    await switch.async_turn_on()
+
+    coordinator.async_request_refresh.assert_not_called()
 
 
 # --- unique_id ---

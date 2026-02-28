@@ -54,9 +54,12 @@ def _make_mock_client(
     devices: list[dict[str, object]] | None = None,
     props_by_sn: dict[str, dict[str, object]] | None = None,
 ) -> MagicMock:
-    """Build a mock Client with async fetch_devices, subscribe, and device()."""
+    """Build a mock Client with devices attribute, subscribe, and device()."""
     client = MagicMock()
-    client.fetch_devices = AsyncMock(return_value=devices or FAKE_DEVICES)
+    # Client.login() populates client.devices; no fetch_devices() call needed.
+    client.devices = devices if devices is not None else FAKE_DEVICES
+    # Keep fetch_devices as a trackable mock so tests can assert it is never called.
+    client.fetch_devices = AsyncMock()
 
     default_props: dict[str, dict[str, object]] = {
         "SN001": FAKE_PROPS_SN001,
@@ -79,6 +82,17 @@ def _make_mock_client(
 
 
 # --- Tests ---
+
+
+async def test_update_data_raises_update_failed_when_client_none():
+    """_async_update_data() with no client should raise UpdateFailed immediately."""
+    hass = _make_hass()
+    entry = _make_entry()
+    coordinator = JackeryCoordinator(hass, entry)
+    assert coordinator.client is None
+
+    with pytest.raises(_UpdateFailed, match="Client not initialized"):
+        await coordinator._async_update_data()
 
 
 async def test_first_refresh_populates_data():
@@ -138,6 +152,23 @@ async def test_first_refresh_starts_mqtt_subscription():
     mock_client.subscribe.assert_called_once()
     assert coordinator._subscription is not None
     assert coordinator.mqtt_connected is True
+
+
+async def test_fetch_devices_not_called_during_setup():
+    """fetch_devices() must not be called — devices come from Client.login() directly."""
+    hass = _make_hass()
+    entry = _make_entry()
+    mock_client = _make_mock_client()
+
+    coordinator = JackeryCoordinator(hass, entry)
+
+    with patch(
+        "custom_components.jackery.coordinator.Client.login",
+        new=AsyncMock(return_value=mock_client),
+    ):
+        await coordinator.async_config_entry_first_refresh()
+
+    mock_client.fetch_devices.assert_not_called()
 
 
 async def test_mqtt_callback_merges_properties():
@@ -487,8 +518,8 @@ async def test_properties_without_nested_properties_key():
     assert coordinator.data["SN001"]["bt"] == 200
 
 
-async def test_subscription_stopped_on_unload():
-    """Subscription.stop() should be called when the integration is unloaded."""
+async def test_async_unload_stops_subscription():
+    """async_unload() should stop the MQTT subscription."""
     hass = _make_hass()
     entry = _make_entry()
     mock_client = _make_mock_client()
@@ -505,5 +536,16 @@ async def test_subscription_stopped_on_unload():
 
     assert coordinator._subscription is mock_sub
 
-    await coordinator._subscription.stop()
+    await coordinator.async_unload()
     mock_sub.stop.assert_called_once()
+
+
+async def test_async_unload_noop_when_no_subscription():
+    """async_unload() should be a no-op when there is no active subscription."""
+    hass = _make_hass()
+    entry = _make_entry()
+    coordinator = JackeryCoordinator(hass, entry)
+    assert coordinator._subscription is None
+
+    # Should not raise
+    await coordinator.async_unload()

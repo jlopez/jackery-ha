@@ -230,6 +230,7 @@ class JackerySensorEntity(JackeryEntity, SensorEntity):  # type: ignore[misc]
         if raw is None:
             return None
 
+        # value_fn takes precedence over scale; setting both is a no-op for scale.
         if self.entity_description.value_fn is not None:
             return self.entity_description.value_fn(raw)
 

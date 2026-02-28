@@ -138,6 +138,22 @@ def test_redact_device_metadata_empty_list():
     assert _redact_device_metadata([]) == []
 
 
+def test_redact_device_metadata_redacts_nested_sensitive_fields():
+    """Nested sensitive fields inside a device dict must also be redacted."""
+    devices: list[dict[str, object]] = [
+        {
+            "devSn": "SN001",
+            "credentials": {"token": "nested-secret", "safe": "visible"},
+        }
+    ]
+    result = _redact_device_metadata(devices)
+    assert result[0]["devSn"] == "SN001"
+    nested = result[0]["credentials"]
+    assert isinstance(nested, dict)
+    assert nested["token"] == "**REDACTED**"
+    assert nested["safe"] == "visible"
+
+
 # --- async_get_config_entry_diagnostics tests ---
 
 

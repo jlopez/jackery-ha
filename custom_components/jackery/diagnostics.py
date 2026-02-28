@@ -35,17 +35,8 @@ def _redact_dict(data: dict[str, Any]) -> dict[str, Any]:
 def _redact_device_metadata(
     devices: list[dict[str, object]],
 ) -> list[dict[str, object]]:
-    """Extract safe metadata from device dicts, redacting sensitive fields."""
-    safe_devices: list[dict[str, object]] = []
-    for device in devices:
-        safe: dict[str, object] = {}
-        for key, value in device.items():
-            if key in REDACT_FIELDS:
-                safe[key] = "**REDACTED**"
-            else:
-                safe[key] = value
-        safe_devices.append(safe)
-    return safe_devices
+    """Redact sensitive fields from the device list."""
+    return [_redact_dict(dict(device)) for device in devices]
 
 
 async def async_get_config_entry_diagnostics(
