@@ -47,6 +47,7 @@ def _make_hass() -> MagicMock:
 def _make_mock_subscription() -> MagicMock:
     sub = MagicMock()
     sub.stop = AsyncMock()
+    sub.is_connected = True
     return sub
 
 
@@ -549,3 +550,35 @@ async def test_async_unload_noop_when_no_subscription():
 
     # Should not raise
     await coordinator.async_unload()
+
+
+async def test_mqtt_connected_false_during_reconnect():
+    """mqtt_connected should return False when subscription exists but is_connected is False."""
+    hass = _make_hass()
+    entry = _make_entry()
+    mock_client = _make_mock_client()
+
+    mock_sub = _make_mock_subscription()
+    mock_sub.is_connected = False
+    mock_client.subscribe = AsyncMock(return_value=mock_sub)
+
+    coordinator = JackeryCoordinator(hass, entry)
+
+    with patch(
+        "custom_components.jackery.coordinator.Client.login",
+        new=AsyncMock(return_value=mock_client),
+    ):
+        await coordinator.async_config_entry_first_refresh()
+
+    assert coordinator._subscription is not None
+    assert coordinator.mqtt_connected is False
+
+
+async def test_mqtt_connected_false_when_no_subscription():
+    """mqtt_connected should return False when _subscription is None."""
+    hass = _make_hass()
+    entry = _make_entry()
+    coordinator = JackeryCoordinator(hass, entry)
+
+    assert coordinator._subscription is None
+    assert coordinator.mqtt_connected is False
