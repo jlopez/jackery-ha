@@ -4,6 +4,8 @@ from __future__ import annotations
 
 from unittest.mock import AsyncMock, MagicMock
 
+from socketry import MqttError
+
 from custom_components.jackery.const import CONF_EMAIL, CONF_PASSWORD
 from custom_components.jackery.coordinator import JackeryCoordinator
 from custom_components.jackery.select import (
@@ -243,12 +245,12 @@ async def test_select_option_battery_protection():
     assert coordinator.data["SN001"]["lps"] == 1
 
 
-async def test_select_option_logs_error_and_skips_optimistic_on_failure():
+async def test_select_option_logs_error_and_skips_optimistic_on_mqtt_error():
     coordinator = _make_coordinator()
     select = _make_select("lm", coordinator=coordinator)
 
     client = _mock_client(coordinator)
-    client.device.return_value.set_property.side_effect = OSError("connection lost")
+    client.device.return_value.set_property.side_effect = MqttError("connection lost")
 
     # lm starts at 0 ("off")
     assert select.current_option == "off"
@@ -291,12 +293,12 @@ async def test_select_option_noop_when_device_not_found():
     await select.async_select_option("high")
 
 
-async def test_select_option_noop_when_device_list_empty():
+async def test_select_option_noop_when_device_sn_not_found():
     coordinator = _make_coordinator()
     select = _make_select("lm", coordinator=coordinator)
-    _mock_client(coordinator).device.side_effect = IndexError("device list is empty")
+    _mock_client(coordinator).device.side_effect = KeyError("SN_UNKNOWN")
 
-    # Should not raise - IndexError is caught and logged
+    # Should not raise - KeyError is caught and logged
     await select.async_select_option("high")
 
 

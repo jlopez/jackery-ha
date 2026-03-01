@@ -15,6 +15,7 @@ from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import EntityCategory
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
+from socketry import MqttError
 
 from .coordinator import JackeryCoordinator
 from .entity import JackeryEntity
@@ -136,7 +137,7 @@ class JackerySwitchEntity(JackeryEntity, SwitchEntity):  # type: ignore[misc]
         try:
             device = coordinator.client.device(sn)
             await device.set_property(slug, value)
-        except (KeyError, IndexError, ValueError, OSError) as err:
+        except (KeyError, ValueError, MqttError) as err:
             _LOGGER.error("Failed to set %s=%s for device %s: %s", slug, value, sn, err)
             return
 
