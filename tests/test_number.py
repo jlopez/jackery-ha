@@ -4,6 +4,8 @@ from __future__ import annotations
 
 from unittest.mock import AsyncMock, MagicMock
 
+from socketry import MqttError
+
 from custom_components.jackery.const import CONF_EMAIL, CONF_PASSWORD
 from custom_components.jackery.coordinator import JackeryCoordinator
 from custom_components.jackery.number import (
@@ -251,12 +253,12 @@ async def test_set_value_applies_optimistic_update():
     assert number.native_value == 18.0
 
 
-async def test_set_value_logs_error_and_skips_optimistic_on_failure():
+async def test_set_value_logs_error_and_skips_optimistic_on_mqtt_error():
     coordinator = _make_coordinator()
     number = _make_number("ast", coordinator=coordinator)
 
     client = _mock_client(coordinator)
-    client.device.return_value.set_property.side_effect = OSError("connection lost")
+    client.device.return_value.set_property.side_effect = MqttError("connection lost")
 
     # ast starts at 12
     assert number.native_value == 12.0
@@ -299,12 +301,12 @@ async def test_set_value_noop_when_device_not_found():
     await number.async_set_native_value(18.0)
 
 
-async def test_set_value_noop_when_device_list_empty():
+async def test_set_value_noop_when_device_sn_not_found():
     coordinator = _make_coordinator()
     number = _make_number("ast", coordinator=coordinator)
-    _mock_client(coordinator).device.side_effect = IndexError("device list is empty")
+    _mock_client(coordinator).device.side_effect = KeyError("SN_UNKNOWN")
 
-    # Should not raise - IndexError is caught and logged
+    # Should not raise - KeyError is caught and logged
     await number.async_set_native_value(18.0)
 
 
