@@ -46,7 +46,7 @@ class JackeryConfigFlow(ConfigFlow, domain=DOMAIN):  # type: ignore[call-arg,mis
                 if not devices:
                     errors["base"] = "no_devices"
                 else:
-                    user_id = str(client._creds.get("userId", ""))
+                    user_id = client.user_id
                     await self.async_set_unique_id(user_id)
                     self._abort_if_unique_id_configured()
 

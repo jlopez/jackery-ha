@@ -46,7 +46,7 @@ def mock_client() -> MagicMock:
     """Create a mock socketry Client."""
     client = MagicMock()
     client.devices = FAKE_DEVICES
-    client._creds = {"userId": "user-42", "devices": FAKE_DEVICES}
+    client.user_id = "user-42"
     return client
 
 

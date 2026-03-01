@@ -7,6 +7,6 @@
   "integration_type": "hub",
   "iot_class": "cloud_push",
   "issue_tracker": "https://github.com/jlopez/jackery-ha/issues",
-  "requirements": ["socketry>=0.2.0"],
+  "requirements": ["socketry>=0.2.1"],
   "version": "0.1.0"
 }
