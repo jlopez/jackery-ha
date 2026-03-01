@@ -43,8 +43,8 @@ class JackeryCoordinator(DataUpdateCoordinator[JackeryData]):  # type: ignore[mi
 
     @property
     def mqtt_connected(self) -> bool:
-        """Return True when the MQTT subscription is active."""
-        return self._subscription is not None
+        """Return True when the MQTT broker connection is established."""
+        return self._subscription is not None and self._subscription.is_connected
 
     async def _async_setup(self) -> None:
         """Perform first-time setup: login, fetch device list, start MQTT."""
