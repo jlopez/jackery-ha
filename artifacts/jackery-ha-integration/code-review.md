@@ -527,3 +527,72 @@ The recursive redaction handles nested dicts but not lists containing dicts. If 
 *None identified*
 
 ---
+
+## Reauth Flow: AuthenticationError and Reauth Implementation (7e5e826)
+
+**Files Reviewed:**
+- `custom_components/jackery/config_flow.py`
+- `custom_components/jackery/coordinator.py`
+- `custom_components/jackery/strings.json`
+- `custom_components/jackery/translations/en.json`
+- `tests/conftest.py`
+- `tests/test_config_flow.py`
+- `tests/test_coordinator.py`
+
+### Critical
+
+**Issue 11.1: Coordinator `_async_setup()` catches `AuthenticationError` but `Client.login()` raises `RuntimeError`** ([coordinator.py:56](custom_components/jackery/coordinator.py#L56))
+
+`Client.login()` delegates to `_http_login()`, which raises `RuntimeError("Login failed: ...")` on authentication failure. It does NOT raise `AuthenticationError`. The commit changed the except clause from `except RuntimeError` to `except AuthenticationError`, meaning auth failures during initial login will no longer be caught as `ConfigEntryAuthFailed` -- they will propagate as unhandled `RuntimeError`, which the coordinator framework treats as a generic failure rather than triggering the reauth flow.
+
+`AuthenticationError` is only raised by `Client._relogin()` when automatic re-authentication fails during an active session. `Client.login()` (initial login) always raises `RuntimeError`.
+
+**Fix:** Catch both: `except (RuntimeError, AuthenticationError) as err`
+
+---
+
+**Issue 11.2: Coordinator `_async_update_data()` catches only `AuthenticationError` but `Device.get_all_properties()` can also raise `RuntimeError`** ([coordinator.py:91](custom_components/jackery/coordinator.py#L91))
+
+`Device.get_all_properties()` calls `_ensure_fresh_token()`, which calls `_http_login()` directly without wrapping exceptions. If the proactive token refresh fails with bad credentials, `_http_login` raises `RuntimeError`. The `_relogin()` path wraps failures into `AuthenticationError`, but the `_ensure_fresh_token` path does not. So both exception types can surface as auth failures during property fetching.
+
+**Fix:** Catch both: `except (RuntimeError, AuthenticationError) as err`
+
+---
+
+### Moderate
+
+**Issue 11.3: Config flow `async_step_user` and `async_step_reauth_confirm` only catch `RuntimeError` but should also catch `AuthenticationError`** ([config_flow.py:38](custom_components/jackery/config_flow.py#L38), [config_flow.py:91](custom_components/jackery/config_flow.py#L91))
+
+While `Client.login()` currently raises `RuntimeError` on auth failure (not `AuthenticationError`), the coordinator was updated to also catch `AuthenticationError`. For consistency and forward-compatibility with potential socketry API changes, the config flow should catch both exception types.
+
+**Fix:** Change `except RuntimeError` to `except (RuntimeError, AuthenticationError)` in both methods, and add the `AuthenticationError` import.
+
+---
+
+**Issue 11.4: Missing test for `async_step_reauth_confirm` with `user_input=None`** ([config_flow.py:85](custom_components/jackery/config_flow.py#L85))
+
+The `async_step_reauth_confirm` method handles `user_input=None` by showing the form, but no test covers this path. While the form is also shown by `async_step_reauth`, the confirm step has its own `None` handling branch.
+
+**Fix:** Add a test.
+
+---
+
+### Minor
+
+**Issue 11.5: Test `test_reauth_confirm_invalid_auth` only tests `RuntimeError`, not `AuthenticationError`** ([test_config_flow.py:250-264](tests/test_config_flow.py#L250))
+
+After fixing Issue 11.3, the config flow will catch both `RuntimeError` and `AuthenticationError`. The test should verify both paths.
+
+**Fix:** Add a test for `AuthenticationError` in the reauth confirm path.
+
+---
+
+**Issue 11.6: strings.json and translations/en.json are identical and in sync** -- No issue.
+
+---
+
+**Issue 11.7: Conftest stubs are correct and sufficient for reauth testing.** -- No issue.
+
+The `_get_reauth_entry()` stub correctly returns the entry from `context`, and `async_update_reload_and_abort()` correctly mutates `entry.data` and returns the abort dict. The `__init__` method correctly initializes `self.context = {}`.
+
+---

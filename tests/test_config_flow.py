@@ -6,6 +6,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import aiohttp
 import pytest
+from socketry import AuthenticationError
 
 from custom_components.jackery.config_flow import JackeryConfigFlow
 from custom_components.jackery.const import CONF_EMAIL, CONF_PASSWORD
@@ -192,3 +193,118 @@ async def test_duplicate_account(hass, mock_client):
         pytest.raises(AbortFlow, match="already_configured"),
     ):
         await flow.async_step_user(user_input=VALID_INPUT)
+
+
+# --- Reauth flow helpers ---
+
+
+def _make_reauth_flow(hass: MagicMock, existing_entry: MagicMock) -> JackeryConfigFlow:
+    """Create a JackeryConfigFlow configured for reauth."""
+    flow = JackeryConfigFlow()
+    flow.hass = hass
+    flow.context = {"_reauth_entry": existing_entry}
+    return flow
+
+
+@pytest.fixture
+def existing_entry() -> MagicMock:
+    """Create a mock config entry with existing credentials."""
+    entry = MagicMock()
+    entry.data = {CONF_EMAIL: "user@example.com", CONF_PASSWORD: "old_password"}
+    return entry
+
+
+# --- Reauth tests ---
+
+
+async def test_reauth_shows_form(hass, existing_entry):
+    """async_step_reauth shows a form pre-filled with existing email."""
+    flow = _make_reauth_flow(hass, existing_entry)
+
+    result = await flow.async_step_reauth(
+        entry_data={CONF_EMAIL: "user@example.com", CONF_PASSWORD: "old_password"},
+    )
+
+    assert result["type"] == "form"
+    assert result["step_id"] == "reauth_confirm"
+    assert result["errors"] == {}
+
+
+async def test_reauth_confirm_success(hass, existing_entry, mock_client):
+    """Successful reauth updates stored password and aborts with reauth_successful."""
+    flow = _make_reauth_flow(hass, existing_entry)
+
+    with patch(
+        "custom_components.jackery.config_flow.Client.login",
+        new=AsyncMock(return_value=mock_client),
+    ):
+        result = await flow.async_step_reauth_confirm(
+            user_input={CONF_EMAIL: "user@example.com", CONF_PASSWORD: "new_password"},
+        )
+
+    assert result["type"] == "abort"
+    assert result["reason"] == "reauth_successful"
+    assert existing_entry.data[CONF_EMAIL] == "user@example.com"
+    assert existing_entry.data[CONF_PASSWORD] == "new_password"
+
+
+async def test_reauth_confirm_shows_form_when_no_input(hass, existing_entry):
+    """async_step_reauth_confirm with no user_input shows the form."""
+    flow = _make_reauth_flow(hass, existing_entry)
+
+    result = await flow.async_step_reauth_confirm(user_input=None)
+
+    assert result["type"] == "form"
+    assert result["step_id"] == "reauth_confirm"
+    assert result["errors"] == {}
+
+
+async def test_reauth_confirm_invalid_auth(hass, existing_entry):
+    """RuntimeError during reauth shows invalid_auth error."""
+    flow = _make_reauth_flow(hass, existing_entry)
+
+    with patch(
+        "custom_components.jackery.config_flow.Client.login",
+        new=AsyncMock(side_effect=RuntimeError("Login failed: bad credentials")),
+    ):
+        result = await flow.async_step_reauth_confirm(
+            user_input={CONF_EMAIL: "user@example.com", CONF_PASSWORD: "wrong_password"},
+        )
+
+    assert result["type"] == "form"
+    assert result["step_id"] == "reauth_confirm"
+    assert result["errors"]["base"] == "invalid_auth"
+
+
+async def test_reauth_confirm_authentication_error(hass, existing_entry):
+    """AuthenticationError during reauth shows invalid_auth error."""
+    flow = _make_reauth_flow(hass, existing_entry)
+
+    with patch(
+        "custom_components.jackery.config_flow.Client.login",
+        new=AsyncMock(side_effect=AuthenticationError("Re-authentication failed")),
+    ):
+        result = await flow.async_step_reauth_confirm(
+            user_input={CONF_EMAIL: "user@example.com", CONF_PASSWORD: "wrong_password"},
+        )
+
+    assert result["type"] == "form"
+    assert result["step_id"] == "reauth_confirm"
+    assert result["errors"]["base"] == "invalid_auth"
+
+
+async def test_reauth_confirm_cannot_connect(hass, existing_entry):
+    """Network error during reauth shows cannot_connect error."""
+    flow = _make_reauth_flow(hass, existing_entry)
+
+    with patch(
+        "custom_components.jackery.config_flow.Client.login",
+        new=AsyncMock(side_effect=aiohttp.ClientConnectionError("Connection refused")),
+    ):
+        result = await flow.async_step_reauth_confirm(
+            user_input={CONF_EMAIL: "user@example.com", CONF_PASSWORD: "new_password"},
+        )
+
+    assert result["type"] == "form"
+    assert result["step_id"] == "reauth_confirm"
+    assert result["errors"]["base"] == "cannot_connect"
