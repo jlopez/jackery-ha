@@ -413,7 +413,7 @@ dev = [
 ]
 
 [package.metadata]
-requires-dist = [{ name = "socketry", specifier = ">=0.2.1" }]
+requires-dist = [{ name = "socketry", specifier = ">=0.2.2" }]
 
 [package.metadata.requires-dev]
 dev = [
@@ -1027,7 +1027,7 @@ wheels = [
 
 [[package]]
 name = "socketry"
-version = "0.2.1"
+version = "0.2.2"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "aiohttp" },
@@ -1035,9 +1035,9 @@ dependencies = [
     { name = "pycryptodome" },
     { name = "typer" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/4e/01/1cfcbba3cad1320e1ef8cb984c5d263e8c20ea509f187572169138195ad0/socketry-0.2.1.tar.gz", hash = "sha256:bb2f5af409f8a731aeada40abd00fd2881bb6e781a37a02d9d8a3fcbd866f7a5", size = 21146, upload-time = "2026-03-01T04:59:07.788Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/86/e0/10808835a80cd532ead491a5cfd8481ef4a506de4a88679b4d82aa461d9f/socketry-0.2.2.tar.gz", hash = "sha256:0d3db83e8ec7929c36d916a9aa6b962c0c15aaad2a35a68c246b36b9ba0671b4", size = 21185, upload-time = "2026-03-02T18:45:32.771Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/de/c4/4d8fcd0dce1b2fb05dd7b60e93ceeef8c2efbd4ba417fd1a0458224e783b/socketry-0.2.1-py3-none-any.whl", hash = "sha256:64a1c540e8293cf777b8f72a644b0915e00358502294d07d8566d4c6bb2d0d33", size = 23602, upload-time = "2026-03-01T04:59:06.318Z" },
+    { url = "https://files.pythonhosted.org/packages/68/f1/bdd54596b0a9a910f15f78a807c4b754f446133c3a58338889155cd9ee1a/socketry-0.2.2-py3-none-any.whl", hash = "sha256:d1c91026cbcf67f018c6832f1a460e12ffaaa4d7f86c01580e876fe4d7112cc1", size = 23635, upload-time = "2026-03-02T18:45:31.301Z" },
 ]
 
 [[package]]

@@ -57,9 +57,9 @@ If the user provides a live HA instance accessible via SSH running this integrat
 
 Workflow:
 1. `docker ps` to identify the HA container name and `docker inspect <container>` to find the config volume mount path
-2. `sudo cp` changed files into `<config_volume>/custom_components/jackery/` (create subdirs as needed)
+2. Update integration in `<config_volume>/custom_components/jackery/`
 3. `docker restart <container>` to apply changes
-4. Verify in the HA UI — no HACS release needed
+4. Verify in the HA UI
 
 ## Git Commits
 

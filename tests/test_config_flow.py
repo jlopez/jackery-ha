@@ -92,7 +92,7 @@ async def test_invalid_auth(hass):
 
     with patch(
         "custom_components.jackery.config_flow.Client.login",
-        new=AsyncMock(side_effect=RuntimeError("Login failed: invalid credentials")),
+        new=AsyncMock(side_effect=AuthenticationError("Login failed: invalid credentials")),
     ):
         result = await flow.async_step_user(user_input=VALID_INPUT)
 
@@ -260,12 +260,12 @@ async def test_reauth_confirm_shows_form_when_no_input(hass, existing_entry):
 
 
 async def test_reauth_confirm_invalid_auth(hass, existing_entry):
-    """RuntimeError during reauth shows invalid_auth error."""
+    """AuthenticationError during reauth shows invalid_auth error."""
     flow = _make_reauth_flow(hass, existing_entry)
 
     with patch(
         "custom_components.jackery.config_flow.Client.login",
-        new=AsyncMock(side_effect=RuntimeError("Login failed: bad credentials")),
+        new=AsyncMock(side_effect=AuthenticationError("Login failed: bad credentials")),
     ):
         result = await flow.async_step_reauth_confirm(
             user_input={CONF_EMAIL: "user@example.com", CONF_PASSWORD: "wrong_password"},
