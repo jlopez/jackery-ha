@@ -8,6 +8,14 @@
           "email": "Email",
           "password": "Password"
         }
+      },
+      "reauth_confirm": {
+        "title": "Re-authenticate Jackery",
+        "description": "Your Jackery credentials are no longer valid. Please re-enter your password.",
+        "data": {
+          "email": "Email",
+          "password": "Password"
+        }
       }
     },
     "error": {
@@ -17,7 +25,8 @@
       "unknown": "An unexpected error occurred."
     },
     "abort": {
-      "already_configured": "This account is already configured."
+      "already_configured": "This account is already configured.",
+      "reauth_successful": "Re-authentication successful."
     }
   },
   "entity": {

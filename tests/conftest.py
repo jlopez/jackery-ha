@@ -31,6 +31,9 @@ class _StubConfigFlow:
     def __init_subclass__(cls, *, domain: str = "", **kwargs: Any) -> None:
         super().__init_subclass__(**kwargs)
 
+    def __init__(self) -> None:
+        self.context: dict[str, Any] = {}
+
     def async_show_form(
         self, *, step_id: str, data_schema: Any = None, errors: dict[str, str] | None = None
     ) -> dict[str, Any]:
@@ -47,6 +50,15 @@ class _StubConfigFlow:
 
     def _abort_if_unique_id_configured(self) -> None:
         pass
+
+    def _get_reauth_entry(self) -> Any:
+        """Return the entry being reauthenticated (test stub)."""
+        return self.context.get("_reauth_entry")
+
+    def async_update_reload_and_abort(self, entry: Any, *, data: dict[str, Any]) -> dict[str, Any]:
+        """Update entry data and signal reauth success (test stub)."""
+        entry.data = data
+        return {"type": "abort", "reason": "reauth_successful"}
 
 
 # A simple alias for ConfigFlowResult

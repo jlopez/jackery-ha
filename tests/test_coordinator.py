@@ -6,6 +6,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import aiohttp
 import pytest
+from socketry import AuthenticationError
 
 from custom_components.jackery.const import CONF_EMAIL, CONF_PASSWORD
 from custom_components.jackery.coordinator import JackeryCoordinator
@@ -332,7 +333,7 @@ async def test_subsequent_poll_fetches_fresh_data():
 
 
 async def test_auth_failure_on_login_raises_config_entry_auth_failed():
-    """Login failure (RuntimeError) should raise ConfigEntryAuthFailed."""
+    """Login failure (AuthenticationError) should raise ConfigEntryAuthFailed."""
     hass = _make_hass()
     entry = _make_entry()
 
@@ -341,7 +342,7 @@ async def test_auth_failure_on_login_raises_config_entry_auth_failed():
     with (
         patch(
             "custom_components.jackery.coordinator.Client.login",
-            new=AsyncMock(side_effect=RuntimeError("Login failed: invalid credentials")),
+            new=AsyncMock(side_effect=AuthenticationError("Login failed: invalid credentials")),
         ),
         pytest.raises(_ConfigEntryAuthFailed),
     ):
@@ -349,14 +350,14 @@ async def test_auth_failure_on_login_raises_config_entry_auth_failed():
 
 
 async def test_auth_failure_on_fetch_raises_config_entry_auth_failed():
-    """RuntimeError during property fetch should raise ConfigEntryAuthFailed."""
+    """AuthenticationError during property fetch should raise ConfigEntryAuthFailed."""
     hass = _make_hass()
     entry = _make_entry()
     mock_client = _make_mock_client()
 
     device_mock = MagicMock()
     device_mock.get_all_properties = AsyncMock(
-        side_effect=RuntimeError("Property fetch failed: token expired")
+        side_effect=AuthenticationError("Property fetch failed: token expired")
     )
     mock_client.device.side_effect = None
     mock_client.device.return_value = device_mock

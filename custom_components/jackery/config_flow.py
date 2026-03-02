@@ -64,6 +64,49 @@ class JackeryConfigFlow(ConfigFlow, domain=DOMAIN):  # type: ignore[call-arg,mis
             errors=errors,
         )
 
+    async def async_step_reauth(
+        self,
+        entry_data: dict[str, Any],
+    ) -> ConfigFlowResult:
+        """Handle reauth when credentials become invalid."""
+        return self.async_show_form(
+            step_id="reauth_confirm",
+            data_schema=self._build_schema(entry_data),
+            errors={},
+        )
+
+    async def async_step_reauth_confirm(
+        self,
+        user_input: dict[str, Any] | None = None,
+    ) -> ConfigFlowResult:
+        """Handle reauth confirmation form."""
+        errors: dict[str, str] = {}
+
+        if user_input is not None:
+            email = user_input[CONF_EMAIL]
+            password = user_input[CONF_PASSWORD]
+
+            try:
+                await Client.login(email, password)
+            except RuntimeError:
+                errors["base"] = "invalid_auth"
+            except (aiohttp.ClientError, TimeoutError, OSError):
+                errors["base"] = "cannot_connect"
+            except Exception:
+                _LOGGER.exception("Unexpected error during Jackery reauth")
+                errors["base"] = "unknown"
+            else:
+                return self.async_update_reload_and_abort(
+                    self._get_reauth_entry(),
+                    data={CONF_EMAIL: email, CONF_PASSWORD: password},
+                )
+
+        return self.async_show_form(
+            step_id="reauth_confirm",
+            data_schema=self._build_schema(user_input),
+            errors=errors,
+        )
+
     def _build_schema(self, user_input: dict[str, Any] | None = None) -> vol.Schema:
         """Build the form schema with optional defaults from prior input."""
         return vol.Schema(

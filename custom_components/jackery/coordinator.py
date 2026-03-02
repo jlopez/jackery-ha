@@ -10,7 +10,7 @@ from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 from homeassistant.exceptions import ConfigEntryAuthFailed
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
-from socketry import Client, Subscription
+from socketry import AuthenticationError, Client, Subscription
 
 from .const import CONF_EMAIL, CONF_PASSWORD, DEFAULT_POLL_INTERVAL
 
@@ -53,7 +53,7 @@ class JackeryCoordinator(DataUpdateCoordinator[JackeryData]):  # type: ignore[mi
 
         try:
             client = await Client.login(email, password)
-        except RuntimeError as err:
+        except AuthenticationError as err:
             raise ConfigEntryAuthFailed(str(err)) from err
         except (aiohttp.ClientError, TimeoutError, OSError) as err:
             raise UpdateFailed(f"Cannot connect to Jackery API: {err}") from err
@@ -88,7 +88,7 @@ class JackeryCoordinator(DataUpdateCoordinator[JackeryData]):  # type: ignore[mi
                     data[sn] = props
                 else:
                     data[sn] = {}
-            except RuntimeError as err:
+            except AuthenticationError as err:
                 # Auth errors affect the whole account — abort immediately.
                 raise ConfigEntryAuthFailed(str(err)) from err
             except (aiohttp.ClientError, TimeoutError, OSError) as err:
