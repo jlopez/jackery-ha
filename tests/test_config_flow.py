@@ -6,6 +6,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import aiohttp
 import pytest
+from socketry import AuthenticationError
 
 from custom_components.jackery.config_flow import JackeryConfigFlow
 from custom_components.jackery.const import CONF_EMAIL, CONF_PASSWORD
@@ -247,6 +248,17 @@ async def test_reauth_confirm_success(hass, existing_entry, mock_client):
     assert existing_entry.data[CONF_PASSWORD] == "new_password"
 
 
+async def test_reauth_confirm_shows_form_when_no_input(hass, existing_entry):
+    """async_step_reauth_confirm with no user_input shows the form."""
+    flow = _make_reauth_flow(hass, existing_entry)
+
+    result = await flow.async_step_reauth_confirm(user_input=None)
+
+    assert result["type"] == "form"
+    assert result["step_id"] == "reauth_confirm"
+    assert result["errors"] == {}
+
+
 async def test_reauth_confirm_invalid_auth(hass, existing_entry):
     """RuntimeError during reauth shows invalid_auth error."""
     flow = _make_reauth_flow(hass, existing_entry)
@@ -254,6 +266,23 @@ async def test_reauth_confirm_invalid_auth(hass, existing_entry):
     with patch(
         "custom_components.jackery.config_flow.Client.login",
         new=AsyncMock(side_effect=RuntimeError("Login failed: bad credentials")),
+    ):
+        result = await flow.async_step_reauth_confirm(
+            user_input={CONF_EMAIL: "user@example.com", CONF_PASSWORD: "wrong_password"},
+        )
+
+    assert result["type"] == "form"
+    assert result["step_id"] == "reauth_confirm"
+    assert result["errors"]["base"] == "invalid_auth"
+
+
+async def test_reauth_confirm_authentication_error(hass, existing_entry):
+    """AuthenticationError during reauth shows invalid_auth error."""
+    flow = _make_reauth_flow(hass, existing_entry)
+
+    with patch(
+        "custom_components.jackery.config_flow.Client.login",
+        new=AsyncMock(side_effect=AuthenticationError("Re-authentication failed")),
     ):
         result = await flow.async_step_reauth_confirm(
             user_input={CONF_EMAIL: "user@example.com", CONF_PASSWORD: "wrong_password"},

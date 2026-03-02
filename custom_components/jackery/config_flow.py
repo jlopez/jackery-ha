@@ -8,7 +8,7 @@ from typing import Any
 import aiohttp
 import voluptuous as vol
 from homeassistant.config_entries import ConfigFlow, ConfigFlowResult
-from socketry import Client
+from socketry import AuthenticationError, Client
 
 from .const import CONF_EMAIL, CONF_PASSWORD, DOMAIN
 
@@ -35,7 +35,7 @@ class JackeryConfigFlow(ConfigFlow, domain=DOMAIN):  # type: ignore[call-arg,mis
                 client = await Client.login(email, password)
                 # login() fetches devices internally; read from the cached list.
                 devices = client.devices
-            except RuntimeError:
+            except (RuntimeError, AuthenticationError):
                 errors["base"] = "invalid_auth"
             except (aiohttp.ClientError, TimeoutError, OSError):
                 errors["base"] = "cannot_connect"
@@ -88,7 +88,7 @@ class JackeryConfigFlow(ConfigFlow, domain=DOMAIN):  # type: ignore[call-arg,mis
 
             try:
                 await Client.login(email, password)
-            except RuntimeError:
+            except (RuntimeError, AuthenticationError):
                 errors["base"] = "invalid_auth"
             except (aiohttp.ClientError, TimeoutError, OSError):
                 errors["base"] = "cannot_connect"

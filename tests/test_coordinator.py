@@ -349,6 +349,23 @@ async def test_auth_failure_on_login_raises_config_entry_auth_failed():
         await coordinator.async_config_entry_first_refresh()
 
 
+async def test_runtime_error_on_login_raises_config_entry_auth_failed():
+    """RuntimeError from Client.login() should raise ConfigEntryAuthFailed."""
+    hass = _make_hass()
+    entry = _make_entry()
+
+    coordinator = JackeryCoordinator(hass, entry)
+
+    with (
+        patch(
+            "custom_components.jackery.coordinator.Client.login",
+            new=AsyncMock(side_effect=RuntimeError("Login failed: bad credentials")),
+        ),
+        pytest.raises(_ConfigEntryAuthFailed),
+    ):
+        await coordinator.async_config_entry_first_refresh()
+
+
 async def test_auth_failure_on_fetch_raises_config_entry_auth_failed():
     """AuthenticationError during property fetch should raise ConfigEntryAuthFailed."""
     hass = _make_hass()
@@ -358,6 +375,31 @@ async def test_auth_failure_on_fetch_raises_config_entry_auth_failed():
     device_mock = MagicMock()
     device_mock.get_all_properties = AsyncMock(
         side_effect=AuthenticationError("Property fetch failed: token expired")
+    )
+    mock_client.device.side_effect = None
+    mock_client.device.return_value = device_mock
+
+    coordinator = JackeryCoordinator(hass, entry)
+
+    with (
+        patch(
+            "custom_components.jackery.coordinator.Client.login",
+            new=AsyncMock(return_value=mock_client),
+        ),
+        pytest.raises(_ConfigEntryAuthFailed),
+    ):
+        await coordinator.async_config_entry_first_refresh()
+
+
+async def test_runtime_error_on_fetch_raises_config_entry_auth_failed():
+    """RuntimeError during property fetch should raise ConfigEntryAuthFailed."""
+    hass = _make_hass()
+    entry = _make_entry()
+    mock_client = _make_mock_client()
+
+    device_mock = MagicMock()
+    device_mock.get_all_properties = AsyncMock(
+        side_effect=RuntimeError("Login failed: bad credentials")
     )
     mock_client.device.side_effect = None
     mock_client.device.return_value = device_mock

@@ -53,7 +53,7 @@ class JackeryCoordinator(DataUpdateCoordinator[JackeryData]):  # type: ignore[mi
 
         try:
             client = await Client.login(email, password)
-        except AuthenticationError as err:
+        except (RuntimeError, AuthenticationError) as err:
             raise ConfigEntryAuthFailed(str(err)) from err
         except (aiohttp.ClientError, TimeoutError, OSError) as err:
             raise UpdateFailed(f"Cannot connect to Jackery API: {err}") from err
@@ -88,7 +88,7 @@ class JackeryCoordinator(DataUpdateCoordinator[JackeryData]):  # type: ignore[mi
                     data[sn] = props
                 else:
                     data[sn] = {}
-            except AuthenticationError as err:
+            except (RuntimeError, AuthenticationError) as err:
                 # Auth errors affect the whole account — abort immediately.
                 raise ConfigEntryAuthFailed(str(err)) from err
             except (aiohttp.ClientError, TimeoutError, OSError) as err:
