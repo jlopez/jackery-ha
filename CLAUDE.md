@@ -51,16 +51,6 @@ This is a Home Assistant custom integration, NOT a standard Python package.
 - `pytest-asyncio` with `asyncio_mode = "auto"`
 - Aim for 90%+ coverage; don't do excessive work to cover edge cases that provide little value
 
-### Live HA Testing (hot-deploy without releasing)
-
-If the user provides a live HA instance accessible via SSH running this integration, you may debug it directly.
-
-Workflow:
-1. `docker ps` to identify the HA container name and `docker inspect <container>` to find the config volume mount path
-2. Update integration in `<config_volume>/custom_components/jackery/`
-3. `docker restart <container>` to apply changes
-4. Verify in the HA UI
-
 ## Git Commits
 
 - Use conventional commits: `type(scope): description`
