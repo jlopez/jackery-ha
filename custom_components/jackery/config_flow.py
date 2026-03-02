@@ -35,7 +35,7 @@ class JackeryConfigFlow(ConfigFlow, domain=DOMAIN):  # type: ignore[call-arg,mis
                 client = await Client.login(email, password)
                 # login() fetches devices internally; read from the cached list.
                 devices = client.devices
-            except (RuntimeError, AuthenticationError):
+            except AuthenticationError:
                 errors["base"] = "invalid_auth"
             except (aiohttp.ClientError, TimeoutError, OSError):
                 errors["base"] = "cannot_connect"
@@ -88,7 +88,7 @@ class JackeryConfigFlow(ConfigFlow, domain=DOMAIN):  # type: ignore[call-arg,mis
 
             try:
                 await Client.login(email, password)
-            except (RuntimeError, AuthenticationError):
+            except AuthenticationError:
                 errors["base"] = "invalid_auth"
             except (aiohttp.ClientError, TimeoutError, OSError):
                 errors["base"] = "cannot_connect"
