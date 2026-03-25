@@ -24,6 +24,12 @@ class _StubConfigEntry:
     def __class_getitem__(cls, item: Any) -> type:
         return cls
 
+    def async_on_unload(self, func: Any) -> None:
+        pass
+
+    def add_update_listener(self, listener: Any) -> Any:
+        return lambda: None
+
 
 class _StubConfigFlow:
     """Minimal ConfigFlow stub that supports ``domain=`` class keyword."""
@@ -59,6 +65,28 @@ class _StubConfigFlow:
         """Update entry data and signal reauth success (test stub)."""
         entry.data = data
         return {"type": "abort", "reason": "reauth_successful"}
+
+
+class _StubOptionsFlow:
+    """Minimal OptionsFlow stub."""
+
+    hass: Any = None
+    config_entry: Any = None
+
+    def async_show_form(
+        self, *, step_id: str, data_schema: Any = None, errors: dict[str, str] | None = None,
+        description_placeholders: dict[str, str] | None = None,
+    ) -> dict[str, Any]:
+        return {
+            "type": "form",
+            "step_id": step_id,
+            "data_schema": data_schema,
+            "errors": errors or {},
+            "description_placeholders": description_placeholders or {},
+        }
+
+    def async_create_entry(self, *, title: str, data: dict[str, Any]) -> dict[str, Any]:
+        return {"type": "create_entry", "title": title, "data": data}
 
 
 # A simple alias for ConfigFlowResult
@@ -387,6 +415,7 @@ def _make_ha_modules() -> None:
     # homeassistant.core
     ha_core = ModuleType("homeassistant.core")
     ha_core.HomeAssistant = type("HomeAssistant", (), {})  # type: ignore[attr-defined]
+    ha_core.callback = lambda fn: fn  # type: ignore[attr-defined]  # passthrough decorator
     sys.modules["homeassistant.core"] = ha_core
 
     # homeassistant.const
@@ -406,6 +435,7 @@ def _make_ha_modules() -> None:
     ha_ce.ConfigEntry = _StubConfigEntry  # type: ignore[attr-defined]
     ha_ce.ConfigFlow = _StubConfigFlow  # type: ignore[attr-defined]
     ha_ce.ConfigFlowResult = ConfigFlowResult  # type: ignore[attr-defined]
+    ha_ce.OptionsFlow = _StubOptionsFlow  # type: ignore[attr-defined]
     sys.modules["homeassistant.config_entries"] = ha_ce
 
     # homeassistant.exceptions
@@ -477,6 +507,18 @@ def _make_ha_modules() -> None:
     ha_number.NumberEntityDescription = _NumberEntityDescription  # type: ignore[attr-defined]
     ha_number.NumberEntity = _NumberEntity  # type: ignore[attr-defined]
     sys.modules["homeassistant.components.number"] = ha_number
+
+    # homeassistant.helpers.selector
+    ha_selector = ModuleType("homeassistant.helpers.selector")
+    ha_selector.QrCodeSelector = lambda data: data  # type: ignore[attr-defined]
+    ha_selector.TextSelector = lambda config=None: config  # type: ignore[attr-defined]
+    ha_selector.TextSelectorConfig = lambda **kwargs: kwargs  # type: ignore[attr-defined]
+
+    class _TextSelectorType:  # noqa: N801
+        TEXT = "text"
+
+    ha_selector.TextSelectorType = _TextSelectorType  # type: ignore[attr-defined]
+    sys.modules["homeassistant.helpers.selector"] = ha_selector
 
 
 _make_ha_modules()

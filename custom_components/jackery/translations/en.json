@@ -29,6 +29,22 @@
       "reauth_successful": "Re-authentication successful."
     }
   },
+  "options": {
+    "step": {
+      "init": {
+        "title": "Share Jackery Devices",
+        "description": "In the Jackery mobile app, select the device you want to share, open its settings, and tap \"Scan to share device(s)\" to scan the QR code below. The QR code expires in 5 minutes. After scanning, submit this form to reload the integration and pick up the newly shared devices.",
+        "data": {
+          "qr_code": "Scan with Jackery Mobile App"
+        }
+      }
+    },
+    "error": {
+      "cannot_connect": "Unable to connect to Jackery servers.",
+      "qr_failed": "Failed to generate sharing QR code.",
+      "unknown": "An unexpected error occurred."
+    }
+  },
   "entity": {
     "sensor": {
       "battery": { "name": "Battery" },

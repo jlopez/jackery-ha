@@ -2,11 +2,12 @@
 
 from __future__ import annotations
 
+from typing import Any
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import aiohttp
 import pytest
-from socketry import AuthenticationError
+from socketry import AuthenticationError, SocketryError
 
 from custom_components.jackery.config_flow import JackeryConfigFlow
 from custom_components.jackery.const import CONF_EMAIL, CONF_PASSWORD
@@ -142,8 +143,8 @@ async def test_cannot_connect_os_error(hass):
     assert result["errors"]["base"] == "cannot_connect"
 
 
-async def test_no_devices(hass, mock_client):
-    """Test empty device list shows no_devices error."""
+async def test_no_devices_creates_entry(hass, mock_client):
+    """Test empty device list still creates config entry."""
     flow = _make_flow(hass)
     mock_client.devices = []
 
@@ -153,8 +154,10 @@ async def test_no_devices(hass, mock_client):
     ):
         result = await flow.async_step_user(user_input=VALID_INPUT)
 
-    assert result["type"] == "form"
-    assert result["errors"]["base"] == "no_devices"
+    assert result["type"] == "create_entry"
+    assert result["title"] == "user@example.com"
+    assert result["data"][CONF_EMAIL] == "user@example.com"
+    assert result["data"][CONF_PASSWORD] == "secret123"
 
 
 async def test_unknown_error(hass):
@@ -193,6 +196,79 @@ async def test_duplicate_account(hass, mock_client):
         pytest.raises(AbortFlow, match="already_configured"),
     ):
         await flow.async_step_user(user_input=VALID_INPUT)
+
+
+# --- Options Flow tests ---
+
+
+def _make_options_flow(hass: MagicMock, mock_entry: MagicMock) -> Any:
+    """Create a JackeryOptionsFlow with mocked entry and hass."""
+    from custom_components.jackery.config_flow import JackeryOptionsFlow
+
+    options_flow = JackeryOptionsFlow()
+    options_flow.hass = hass
+    options_flow.config_entry = mock_entry
+    return options_flow
+
+
+@pytest.fixture
+def mock_options_entry(mock_client):
+    """Create a mock config entry for options flow tests."""
+    mock_entry = MagicMock()
+    mock_entry.runtime_data = MagicMock()
+    mock_entry.runtime_data.client = mock_client
+    mock_entry.entry_id = "test_entry_id"
+    return mock_entry
+
+
+async def test_options_flow_available(hass, mock_options_entry):
+    """Test that options flow is available."""
+    from custom_components.jackery.config_flow import JackeryConfigFlow
+
+    options_flow = JackeryConfigFlow.async_get_options_flow(mock_options_entry)
+
+    assert options_flow is not None
+    assert hasattr(options_flow, "async_step_init")
+
+
+async def test_options_flow_shows_qr(hass, mock_client, mock_options_entry):
+    """Test options flow generates and displays QR code."""
+    mock_client.generate_share_qrcode = AsyncMock(
+        return_value={"qrCodeId": "abc123", "userId": 1234567890}
+    )
+
+    options_flow = _make_options_flow(hass, mock_options_entry)
+    result = await options_flow.async_step_init()
+
+    assert result["type"] == "form"
+    assert result["step_id"] == "init"
+    assert "qr_code" in result["data_schema"].schema
+    mock_client.generate_share_qrcode.assert_awaited_once()
+
+
+async def test_options_flow_qr_generation_failure(hass, mock_client, mock_options_entry):
+    """Test options flow QR generation failure shows error."""
+    mock_client.generate_share_qrcode = AsyncMock(side_effect=SocketryError("QR generation failed"))
+
+    options_flow = _make_options_flow(hass, mock_options_entry)
+    result = await options_flow.async_step_init()
+
+    assert result["type"] == "form"
+    assert result["step_id"] == "init"
+    assert result["errors"]["base"] == "qr_failed"
+
+
+async def test_options_flow_submit_creates_entry(hass, mock_client, mock_options_entry):
+    """Test options flow submit reloads integration and creates entry."""
+    hass.config_entries.async_reload = AsyncMock()
+    options_flow = _make_options_flow(hass, mock_options_entry)
+
+    result = await options_flow.async_step_init(user_input={"qr_code": ""})
+
+    assert result["type"] == "create_entry"
+    assert result["title"] == ""
+    assert result["data"] == {}
+    hass.config_entries.async_reload.assert_awaited_once_with("test_entry_id")
 
 
 # --- Reauth flow helpers ---

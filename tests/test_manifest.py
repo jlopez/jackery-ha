@@ -18,8 +18,8 @@ def test_manifest_required_fields():
     assert manifest["config_flow"] is True
     assert manifest["integration_type"] == "hub"
     assert manifest["iot_class"] == "cloud_push"
-    assert "socketry>=0.2.2" in manifest["requirements"]
-    assert manifest["version"] == "0.1.0"
+    assert "socketry>=0.2.3" in manifest["requirements"]
+    assert manifest["version"] == "0.2.1"
     assert "@jlopez" in manifest["codeowners"]
 
 
@@ -44,9 +44,25 @@ def test_strings_config_flow_coverage():
     errors = config["error"]
     assert "invalid_auth" in errors
     assert "cannot_connect" in errors
-    assert "no_devices" in errors
     assert "unknown" in errors
 
     # Abort definitions
     abort = config["abort"]
     assert "already_configured" in abort
+
+
+def test_strings_options_flow_coverage():
+    strings_path = INTEGRATION_DIR / "strings.json"
+    strings = json.loads(strings_path.read_text())
+    options = strings["options"]
+
+    # Step definitions
+    init_step = options["step"]["init"]
+    assert "title" in init_step
+    assert "description" in init_step
+    assert "qr_code" in init_step["data"]
+
+    # Error definitions
+    errors = options["error"]
+    assert "cannot_connect" in errors
+    assert "qr_failed" in errors
