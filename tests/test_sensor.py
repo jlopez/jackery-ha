@@ -191,6 +191,13 @@ def test_time_remaining_zero():
     assert sensor.native_value == 0.0
 
 
+def test_time_to_full_999_returns_value():
+    """999 is passed through as a numeric value (99.9 hours)."""
+    coordinator = _make_coordinator(data={"SN001": {"it": 999}})
+    sensor = _make_sensor("it", coordinator=coordinator)
+    assert sensor.native_value == 99.9
+
+
 # --- AC sensors ---
 
 
