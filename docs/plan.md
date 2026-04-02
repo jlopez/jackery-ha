@@ -122,20 +122,26 @@ CONF_PASSWORD = "password"
 
 ## Phase 2: Config flow [COMPLETE]
 
-**Why**: Entry point for users to add the integration. Validates credentials, discovers devices.
+**Why**: Entry point for users to add the integration. Validates credentials, discovers devices, handles device sharing via QR codes.
 
 ### File: `custom_components/jackery/config_flow.py`
 
 **Behavior**:
-1. Single step: prompt for email + password
+1. **User step**: prompt for email + password
 2. Call `await Client.login(email, password)` to validate credentials
-3. Call `await client.fetch_devices()` to verify at least one device exists
+3. Create config entry regardless of device count (allows empty accounts for sharing)
 4. Use `userId` from client credentials as unique ID (`async_set_unique_id` + `_abort_if_unique_id_configured`)
 5. Store `email` and `password` in `config_entry.data`
-6. Error mapping:
-   - `RuntimeError` from login → `invalid_auth`
-   - `aiohttp.ClientError` / `TimeoutError` → `cannot_connect`
-   - Empty device list → `no_devices`
+6. **Options Flow** (`JackeryOptionsFlow`):
+   - Accessible via integration gear icon → Configure
+   - `async_step_init` redirects directly to QR sharing
+   - `async_step_share_qr`: Generate QR code via `client.generate_share_qrcode()`
+   - Display QR code using `QrCodeSelector` with multiline instructions using `TextSelector`
+   - On form submit, reload entire integration to pick up newly shared devices
+7. Error mapping:
+   - `AuthenticationError` from login → `invalid_auth`
+   - `aiohttp.ClientError` / `TimeoutError` / `OSError` → `cannot_connect`
+   - QR generation failure → `qr_failed`
    - Other exceptions → `unknown`
 
 ### File: `custom_components/jackery/__init__.py` (stub)
@@ -143,10 +149,13 @@ CONF_PASSWORD = "password"
 Minimal `async_setup_entry` / `async_unload_entry` that just returns True. Will be fully implemented in Phase 3.
 
 ### Tests: `tests/test_config_flow.py`
-- Test successful login + device discovery → creates entry
+- Test successful login with/without devices → creates entry
 - Test invalid credentials → shows `invalid_auth` error
 - Test network error → shows `cannot_connect` error
-- Test no devices → shows `no_devices` error
+- Test Options Flow QR code generation and display
+- Test QR generation failures → shows `qr_failed` error
+- Test integration reload after QR sharing submission
+- Test network/auth errors during QR flow
 - Test duplicate account → aborts with `already_configured`
 
 ### Acceptance criteria

@@ -35,7 +35,21 @@ Copy the `custom_components/jackery/` directory into your Home Assistant `custom
 1. Go to **Settings → Devices & Services → Add Integration**
 2. Search for **Jackery Power Stations**
 3. Enter your Jackery app email and password
-4. The integration will discover all devices on your account
+
+### Dedicated Account (Recommended)
+
+Jackery only allows one device to be logged in to an account at a time — a new login will log out the previous device. Because of this, it is recommended that you create a separate Jackery account dedicated to Home Assistant, so the integration doesn't interfere with your mobile app.
+
+To share your devices with the new account:
+
+1. Create a new Jackery account (e.g. using a different email)
+2. Add the integration in Home Assistant using the new account credentials
+3. On the Jackery integration entry, click the gear icon (**Configure**)
+4. A QR code will be displayed
+5. In the Jackery mobile app on your **main** account, select the device you want to share, open its settings, and tap **Scan to share device(s)** to scan the QR code
+6. Click **Submit** in Home Assistant to reload the integration and pick up the newly shared devices
+
+If your account already has devices (e.g. you're using your main account), they'll be discovered automatically and setup completes immediately.
 
 ## Entities
 

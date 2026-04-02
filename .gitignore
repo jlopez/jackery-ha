@@ -41,6 +41,12 @@ htmlcov/
 # Environment
 .env
 
+# Home Assistant development
+ha-config/
+!ha-config/configuration.yaml
+!ha-config/secrets.yaml
+.HA_VERSION
+
 # Keep these
 !.env.example
 !.gitignore
