@@ -52,12 +52,10 @@ def _battery_state_fn(raw: object) -> str | None:
 
 
 def _duration_fn(raw: object) -> float | None:
-    """Return None when raw duration is zero or the sentinel max value (999)."""
+    """Convert raw duration integer to hours (divide by 10)."""
     try:
         val = int(raw)  # type: ignore[call-overload]
     except (TypeError, ValueError):
-        return None
-    if val == 0 or val >= 999:
         return None
     return float(val) / 10
 

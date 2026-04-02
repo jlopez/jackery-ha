@@ -62,8 +62,8 @@ If your account already has devices (e.g. you're using your main account), they'
 | Battery state | enum | — | idle / charging / discharging |
 | Input power | power | W | |
 | Output power | power | W | |
-| Time to full | duration | h | Scaled ÷10, unknown when 0 |
-| Time remaining | duration | h | Scaled ÷10, unknown when 0 |
+| Time to full | duration | h | Scaled ÷10 |
+| Time remaining | duration | h | Scaled ÷10 |
 | AC input power | power | W | |
 | Car input power | power | W | |
 | AC voltage | voltage | V | Scaled ÷10 |
