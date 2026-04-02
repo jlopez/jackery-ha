@@ -173,10 +173,10 @@ def test_time_to_full_nonzero():
     assert sensor.native_value == 3.5
 
 
-def test_time_to_full_zero_returns_none():
+def test_time_to_full_zero():
     coordinator = _make_coordinator(data={"SN001": {"it": 0}})
     sensor = _make_sensor("it", coordinator=coordinator)
-    assert sensor.native_value is None
+    assert sensor.native_value == 0.0
 
 
 def test_time_remaining_nonzero():
@@ -185,10 +185,17 @@ def test_time_remaining_nonzero():
     assert sensor.native_value == 12.0
 
 
-def test_time_remaining_zero_returns_none():
+def test_time_remaining_zero():
     coordinator = _make_coordinator(data={"SN001": {"ot": 0}})
     sensor = _make_sensor("ot", coordinator=coordinator)
-    assert sensor.native_value is None
+    assert sensor.native_value == 0.0
+
+
+def test_time_to_full_999_returns_value():
+    """999 is passed through as a numeric value (99.9 hours)."""
+    coordinator = _make_coordinator(data={"SN001": {"it": 999}})
+    sensor = _make_sensor("it", coordinator=coordinator)
+    assert sensor.native_value == 99.9
 
 
 # --- AC sensors ---
