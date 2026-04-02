@@ -74,7 +74,11 @@ class _StubOptionsFlow:
     config_entry: Any = None
 
     def async_show_form(
-        self, *, step_id: str, data_schema: Any = None, errors: dict[str, str] | None = None,
+        self,
+        *,
+        step_id: str,
+        data_schema: Any = None,
+        errors: dict[str, str] | None = None,
         description_placeholders: dict[str, str] | None = None,
     ) -> dict[str, Any]:
         return {

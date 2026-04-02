@@ -18,7 +18,7 @@ def test_manifest_required_fields():
     assert manifest["config_flow"] is True
     assert manifest["integration_type"] == "hub"
     assert manifest["iot_class"] == "cloud_push"
-    assert "socketry>=0.2.3" in manifest["requirements"]
+    assert "socketry>=0.2.4" in manifest["requirements"]
     assert manifest["version"] == "0.2.1"
     assert "@jlopez" in manifest["codeowners"]
 

@@ -369,6 +369,42 @@ async def test_reauth_confirm_authentication_error(hass, existing_entry):
     assert result["errors"]["base"] == "invalid_auth"
 
 
+async def test_options_flow_network_error(hass, mock_client, mock_options_entry):
+    """Test options flow network error shows cannot_connect."""
+    mock_client.generate_share_qrcode = AsyncMock(side_effect=aiohttp.ClientError())
+
+    options_flow = _make_options_flow(hass, mock_options_entry)
+    result = await options_flow.async_step_init()
+
+    assert result["type"] == "form"
+    assert result["errors"]["base"] == "cannot_connect"
+
+
+async def test_options_flow_no_client(hass):
+    """Test options flow when client is None shows cannot_connect."""
+    mock_entry = MagicMock()
+    mock_entry.runtime_data = MagicMock()
+    mock_entry.runtime_data.client = None
+    mock_entry.entry_id = "test_entry_id"
+
+    options_flow = _make_options_flow(hass, mock_entry)
+    result = await options_flow.async_step_init()
+
+    assert result["type"] == "form"
+    assert result["errors"]["base"] == "cannot_connect"
+
+
+async def test_options_flow_auth_error(hass, mock_client, mock_options_entry):
+    """Test options flow raises ConfigEntryAuthFailed on auth error."""
+    from homeassistant.exceptions import ConfigEntryAuthFailed
+
+    mock_client.generate_share_qrcode = AsyncMock(side_effect=AuthenticationError("expired"))
+
+    options_flow = _make_options_flow(hass, mock_options_entry)
+    with pytest.raises(ConfigEntryAuthFailed):
+        await options_flow.async_step_init()
+
+
 async def test_reauth_confirm_cannot_connect(hass, existing_entry):
     """Network error during reauth shows cannot_connect error."""
     flow = _make_reauth_flow(hass, existing_entry)

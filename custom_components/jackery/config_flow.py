@@ -10,6 +10,7 @@ import aiohttp
 import voluptuous as vol
 from homeassistant.config_entries import ConfigFlow, ConfigFlowResult, OptionsFlow
 from homeassistant.core import callback
+from homeassistant.exceptions import ConfigEntryAuthFailed
 from homeassistant.helpers.selector import QrCodeSelector
 from socketry import AuthenticationError, Client, SocketryError
 
@@ -151,7 +152,7 @@ class JackeryOptionsFlow(OptionsFlow):  # type: ignore[misc]
 
         # Generate QR code
         try:
-            qr_data = await client.generate_share_qrcode()  # type: ignore[attr-defined]
+            qr_data = await client.generate_share_qrcode()
         except (aiohttp.ClientError, TimeoutError, OSError):
             errors["base"] = "cannot_connect"
             return self.async_show_form(
@@ -159,6 +160,8 @@ class JackeryOptionsFlow(OptionsFlow):  # type: ignore[misc]
                 data_schema=vol.Schema({}),
                 errors=errors,
             )
+        except AuthenticationError:
+            raise ConfigEntryAuthFailed from None
         except SocketryError:
             _LOGGER.exception("Failed to generate share QR code")
             errors["base"] = "qr_failed"

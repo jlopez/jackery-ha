@@ -21,7 +21,6 @@
     "error": {
       "invalid_auth": "Invalid email or password.",
       "cannot_connect": "Unable to connect to Jackery servers.",
-      "no_devices": "No devices found on this account.",
       "unknown": "An unexpected error occurred."
     },
     "abort": {
