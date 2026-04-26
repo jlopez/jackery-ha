@@ -54,7 +54,7 @@ def _make_coordinator(
         coordinator.data = {sn: dict(props) for sn, props in FAKE_DATA.items()}
     coordinator.devices = devices if devices is not None else list(FAKE_DEVICES)
     coordinator.client = MagicMock()
-    coordinator.client.device.return_value.set_property = AsyncMock()
+    coordinator.client.device.return_value.set_property = AsyncMock(return_value={})
     return coordinator
 
 
@@ -194,7 +194,7 @@ async def test_turn_on_calls_set_property_with_slug():
 
     client = _mock_client(coordinator)
     client.device.assert_called_once_with("SN001")
-    client.device.return_value.set_property.assert_called_once_with("ac", "on")
+    client.device.return_value.set_property.assert_called_once_with("ac", "on", wait=True)
 
 
 async def test_turn_off_calls_set_property_with_slug():
@@ -205,7 +205,7 @@ async def test_turn_off_calls_set_property_with_slug():
 
     client = _mock_client(coordinator)
     client.device.assert_called_once_with("SN001")
-    client.device.return_value.set_property.assert_called_once_with("dc", "off")
+    client.device.return_value.set_property.assert_called_once_with("dc", "off", wait=True)
 
 
 async def test_turn_on_routes_to_correct_device_sn():
@@ -216,33 +216,69 @@ async def test_turn_on_routes_to_correct_device_sn():
 
     client = _mock_client(coordinator)
     client.device.assert_called_once_with("SN002")
-    client.device.return_value.set_property.assert_called_once_with("ac", "on")
+    client.device.return_value.set_property.assert_called_once_with("ac", "on", wait=True)
 
 
-async def test_turn_on_applies_optimistic_update():
+async def test_turn_on_applies_device_echo():
     coordinator = _make_coordinator()
     switch = _make_switch("odc", coordinator=coordinator)
+    client = _mock_client(coordinator)
+    client.device.return_value.set_property.return_value = {"odc": 1}
 
     # odc starts at 0
     assert switch.is_on is False
 
     await switch.async_turn_on()
 
-    # After turn_on, optimistic update should set odc to 1
+    # State reflects what device echoed back
     assert coordinator.data["SN001"]["odc"] == 1
 
 
-async def test_turn_off_applies_optimistic_update():
+async def test_turn_off_applies_device_echo():
     coordinator = _make_coordinator()
     switch = _make_switch("oac", coordinator=coordinator)
+    client = _mock_client(coordinator)
+    client.device.return_value.set_property.return_value = {"oac": 0}
 
     # oac starts at 1
     assert switch.is_on is True
 
     await switch.async_turn_off()
 
-    # After turn_off, optimistic update should set oac to 0
+    # State reflects what device echoed back
     assert coordinator.data["SN001"]["oac"] == 0
+
+
+async def test_turn_off_reflects_device_refusal_via_echo():
+    """Device may echo unchanged value (firmware refusal); HA must reflect reality."""
+    coordinator = _make_coordinator()
+    switch = _make_switch("oac", coordinator=coordinator)
+    client = _mock_client(coordinator)
+    # Device refuses the turn-off and echoes oac=1 (still on)
+    client.device.return_value.set_property.return_value = {"oac": 1}
+
+    assert switch.is_on is True
+
+    await switch.async_turn_off()
+
+    # State remains 1 (truthful reflection of device refusing the command)
+    assert coordinator.data["SN001"]["oac"] == 1
+    assert switch.is_on is True
+
+
+async def test_turn_off_skips_state_update_on_timeout():
+    """When device does not confirm within timeout, leave state untouched."""
+    coordinator = _make_coordinator()
+    switch = _make_switch("oac", coordinator=coordinator)
+    client = _mock_client(coordinator)
+    client.device.return_value.set_property.return_value = None
+
+    assert switch.is_on is True
+
+    await switch.async_turn_off()
+
+    # No phantom state — original value preserved
+    assert coordinator.data["SN001"]["oac"] == 1
 
 
 async def test_turn_on_config_switch():
@@ -252,15 +288,15 @@ async def test_turn_on_config_switch():
     # sfc starts at 1 (on) -- turn off then on
     await switch.async_turn_off()
     client = _mock_client(coordinator)
-    client.device.return_value.set_property.assert_called_with("sfc", "off")
+    client.device.return_value.set_property.assert_called_with("sfc", "off", wait=True)
 
     client.device.reset_mock()
-    client.device.return_value.set_property = AsyncMock()
+    client.device.return_value.set_property = AsyncMock(return_value={})
     await switch.async_turn_on()
-    client.device.return_value.set_property.assert_called_with("sfc", "on")
+    client.device.return_value.set_property.assert_called_with("sfc", "on", wait=True)
 
 
-async def test_turn_on_logs_error_and_skips_optimistic_on_mqtt_error():
+async def test_turn_on_logs_error_and_skips_state_update_on_mqtt_error():
     coordinator = _make_coordinator()
     switch = _make_switch("oac", coordinator=coordinator)
 
@@ -273,7 +309,7 @@ async def test_turn_on_logs_error_and_skips_optimistic_on_mqtt_error():
     # Should not raise
     await switch.async_turn_on()
 
-    # Optimistic update should NOT have been applied (still 1, not changed)
+    # State should NOT have been applied (still 1, not changed)
     assert coordinator.data["SN001"]["oac"] == 1
 
 
@@ -286,7 +322,7 @@ async def test_turn_on_handles_key_error():
 
     await switch.async_turn_on()
 
-    # Optimistic update should NOT have been applied
+    # State should NOT have been applied
     assert coordinator.data["SN001"]["oac"] == 1
 
 

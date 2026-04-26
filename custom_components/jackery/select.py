@@ -88,25 +88,29 @@ class JackerySelectEntity(JackeryEntity, SelectEntity):  # type: ignore[misc]
         coordinator = self.coordinator
         sn = self._device_sn
         slug = self.entity_description.slug
-        prop_key = self.entity_description.property_key
 
         if coordinator.client is None:
             return
 
         try:
             device = coordinator.client.device(sn)
-            await device.set_property(slug, option)
+            response = await device.set_property(slug, option, wait=True)
         except (KeyError, ValueError, MqttError) as err:
             _LOGGER.error("Failed to set %s=%s for device %s: %s", slug, option, sn, err)
             return
 
-        # Optimistic update: map option string back to index
-        options = self.entity_description.options
-        if options is not None and option in options:
-            optimistic_value = options.index(option)
-            if coordinator.data is not None and sn in coordinator.data:
-                coordinator.data[sn][prop_key] = optimistic_value
-                coordinator.async_set_updated_data(coordinator.data)
+        if response is None:
+            _LOGGER.warning(
+                "Device %s did not confirm %s=%s within timeout; state unchanged",
+                sn,
+                slug,
+                option,
+            )
+            return
+
+        if coordinator.data is not None and sn in coordinator.data:
+            coordinator.data[sn].update(response)
+            coordinator.async_set_updated_data(coordinator.data)
 
 
 async def async_setup_entry(

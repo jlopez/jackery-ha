@@ -48,7 +48,7 @@ def _make_coordinator(
         coordinator.data = {sn: dict(props) for sn, props in FAKE_DATA.items()}
     coordinator.devices = devices if devices is not None else list(FAKE_DEVICES)
     coordinator.client = MagicMock()
-    coordinator.client.device.return_value.set_property = AsyncMock()
+    coordinator.client.device.return_value.set_property = AsyncMock(return_value={})
     return coordinator
 
 
@@ -205,7 +205,7 @@ async def test_set_value_calls_set_property_with_slug():
 
     client = _mock_client(coordinator)
     client.device.assert_called_once_with("SN001")
-    client.device.return_value.set_property.assert_called_once_with("auto-shutdown", 10)
+    client.device.return_value.set_property.assert_called_once_with("auto-shutdown", 10, wait=True)
 
 
 async def test_set_value_energy_saving():
@@ -215,7 +215,7 @@ async def test_set_value_energy_saving():
     await number.async_set_native_value(8.0)
 
     client = _mock_client(coordinator)
-    client.device.return_value.set_property.assert_called_once_with("energy-saving", 8)
+    client.device.return_value.set_property.assert_called_once_with("energy-saving", 8, wait=True)
 
 
 async def test_set_value_screen_timeout():
@@ -225,7 +225,9 @@ async def test_set_value_screen_timeout():
     await number.async_set_native_value(120.0)
 
     client = _mock_client(coordinator)
-    client.device.return_value.set_property.assert_called_once_with("screen-timeout", 120)
+    client.device.return_value.set_property.assert_called_once_with(
+        "screen-timeout", 120, wait=True
+    )
 
 
 async def test_set_value_routes_to_correct_device_sn():
@@ -236,24 +238,56 @@ async def test_set_value_routes_to_correct_device_sn():
 
     client = _mock_client(coordinator)
     client.device.assert_called_once_with("SN002")
-    client.device.return_value.set_property.assert_called_once_with("auto-shutdown", 5)
+    client.device.return_value.set_property.assert_called_once_with("auto-shutdown", 5, wait=True)
 
 
-async def test_set_value_applies_optimistic_update():
+async def test_set_value_applies_device_echo():
     coordinator = _make_coordinator()
     number = _make_number("ast", coordinator=coordinator)
+    client = _mock_client(coordinator)
+    client.device.return_value.set_property.return_value = {"ast": 18}
 
     # ast starts at 12
     assert number.native_value == 12.0
 
     await number.async_set_native_value(18.0)
 
-    # After set, optimistic update should set ast to 18
+    # State reflects what device echoed back
     assert coordinator.data["SN001"]["ast"] == 18
     assert number.native_value == 18.0
 
 
-async def test_set_value_logs_error_and_skips_optimistic_on_mqtt_error():
+async def test_set_value_reflects_device_clamping_via_echo():
+    """Device may clamp a value to its valid range; HA must reflect the clamped value."""
+    coordinator = _make_coordinator()
+    number = _make_number("ast", coordinator=coordinator)
+    client = _mock_client(coordinator)
+    # Commanded 50 but device clamped to 24
+    client.device.return_value.set_property.return_value = {"ast": 24}
+
+    await number.async_set_native_value(50.0)
+
+    # State reflects the clamped value, not the commanded value
+    assert coordinator.data["SN001"]["ast"] == 24
+    assert number.native_value == 24.0
+
+
+async def test_set_value_skips_state_update_on_timeout():
+    coordinator = _make_coordinator()
+    number = _make_number("ast", coordinator=coordinator)
+    client = _mock_client(coordinator)
+    client.device.return_value.set_property.return_value = None
+
+    assert number.native_value == 12.0
+
+    await number.async_set_native_value(18.0)
+
+    # No phantom state — original value preserved
+    assert coordinator.data["SN001"]["ast"] == 12
+    assert number.native_value == 12.0
+
+
+async def test_set_value_logs_error_and_skips_state_update_on_mqtt_error():
     coordinator = _make_coordinator()
     number = _make_number("ast", coordinator=coordinator)
 
@@ -265,7 +299,7 @@ async def test_set_value_logs_error_and_skips_optimistic_on_mqtt_error():
 
     await number.async_set_native_value(18.0)
 
-    # Optimistic update should NOT have been applied
+    # State should NOT have been applied
     assert coordinator.data["SN001"]["ast"] == 12
     assert number.native_value == 12.0
 
@@ -279,7 +313,7 @@ async def test_set_value_handles_key_error():
 
     await number.async_set_native_value(18.0)
 
-    # Optimistic update should NOT have been applied
+    # State should NOT have been applied
     assert coordinator.data["SN001"]["ast"] == 12
 
 
