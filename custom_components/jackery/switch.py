@@ -118,32 +118,40 @@ class JackerySwitchEntity(JackeryEntity, SwitchEntity):  # type: ignore[misc]
 
     async def async_turn_on(self, **kwargs: Any) -> None:
         """Turn the switch on."""
-        await self._async_set_state("on", 1)
+        await self._async_set_state("on")
 
     async def async_turn_off(self, **kwargs: Any) -> None:
         """Turn the switch off."""
-        await self._async_set_state("off", 0)
+        await self._async_set_state("off")
 
-    async def _async_set_state(self, value: str, optimistic_value: int) -> None:
-        """Send a command to the device and apply an optimistic update."""
+    async def _async_set_state(self, value: str) -> None:
+        """Send a command to the device and wait for confirmation."""
         coordinator = self.coordinator
         sn = self._device_sn
         slug = self.entity_description.slug
-        prop_key = self.entity_description.property_key
 
         if coordinator.client is None:
             return
 
         try:
             device = coordinator.client.device(sn)
-            await device.set_property(slug, value)
+            response = await device.set_property(slug, value, wait=True)
         except (KeyError, ValueError, MqttError) as err:
             _LOGGER.error("Failed to set %s=%s for device %s: %s", slug, value, sn, err)
             return
 
-        # Optimistic update: immediately reflect the expected state
+        if response is None:
+            _LOGGER.warning(
+                "Device %s did not confirm %s=%s within timeout; state not updated",
+                sn,
+                slug,
+                value,
+            )
+            return
+
+        # Apply the device's echoed state (may differ from commanded value)
         if coordinator.data is not None and sn in coordinator.data:
-            coordinator.data[sn][prop_key] = optimistic_value
+            coordinator.data[sn].update(response)
             coordinator.async_set_updated_data(coordinator.data)
 
 
