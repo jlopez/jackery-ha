@@ -54,7 +54,7 @@ def _make_coordinator(
         coordinator.data = {sn: dict(props) for sn, props in FAKE_DATA.items()}
     coordinator.devices = devices if devices is not None else list(FAKE_DEVICES)
     coordinator.client = MagicMock()
-    coordinator.client.device.return_value.set_property = AsyncMock()
+    coordinator.client.device.return_value.set_property = AsyncMock(return_value=None)
     return coordinator
 
 
@@ -186,7 +186,7 @@ def test_is_on_none_for_non_numeric():
 # --- turn_on / turn_off tests ---
 
 
-async def test_turn_on_calls_set_property_with_slug():
+async def test_turn_on_calls_set_property_with_wait():
     coordinator = _make_coordinator()
     switch = _make_switch("oac", coordinator=coordinator)
 
@@ -194,10 +194,10 @@ async def test_turn_on_calls_set_property_with_slug():
 
     client = _mock_client(coordinator)
     client.device.assert_called_once_with("SN001")
-    client.device.return_value.set_property.assert_called_once_with("ac", "on")
+    client.device.return_value.set_property.assert_called_once_with("ac", "on", wait=True)
 
 
-async def test_turn_off_calls_set_property_with_slug():
+async def test_turn_off_calls_set_property_with_wait():
     coordinator = _make_coordinator()
     switch = _make_switch("odc", coordinator=coordinator)
 
@@ -205,7 +205,7 @@ async def test_turn_off_calls_set_property_with_slug():
 
     client = _mock_client(coordinator)
     client.device.assert_called_once_with("SN001")
-    client.device.return_value.set_property.assert_called_once_with("dc", "off")
+    client.device.return_value.set_property.assert_called_once_with("dc", "off", wait=True)
 
 
 async def test_turn_on_routes_to_correct_device_sn():
@@ -216,64 +216,80 @@ async def test_turn_on_routes_to_correct_device_sn():
 
     client = _mock_client(coordinator)
     client.device.assert_called_once_with("SN002")
-    client.device.return_value.set_property.assert_called_once_with("ac", "on")
+    client.device.return_value.set_property.assert_called_once_with("ac", "on", wait=True)
 
 
-async def test_turn_on_applies_optimistic_update():
+async def test_turn_on_applies_confirmed_state():
     coordinator = _make_coordinator()
     switch = _make_switch("odc", coordinator=coordinator)
+    client = _mock_client(coordinator)
+    client.device.return_value.set_property = AsyncMock(return_value={"odc": 1})
 
-    # odc starts at 0
     assert switch.is_on is False
-
     await switch.async_turn_on()
-
-    # After turn_on, optimistic update should set odc to 1
     assert coordinator.data["SN001"]["odc"] == 1
 
 
-async def test_turn_off_applies_optimistic_update():
+async def test_turn_off_applies_confirmed_state():
     coordinator = _make_coordinator()
     switch = _make_switch("oac", coordinator=coordinator)
+    client = _mock_client(coordinator)
+    client.device.return_value.set_property = AsyncMock(return_value={"oac": 0})
 
-    # oac starts at 1
     assert switch.is_on is True
-
     await switch.async_turn_off()
-
-    # After turn_off, optimistic update should set oac to 0
     assert coordinator.data["SN001"]["oac"] == 0
+
+
+async def test_no_state_update_when_device_returns_none():
+    """Device timeout (None response) must not change coordinator state."""
+    coordinator = _make_coordinator()
+    switch = _make_switch("oac", coordinator=coordinator)
+    # Default mock returns None — simulates timeout
+    assert switch.is_on is True
+    await switch.async_turn_off()
+    # State unchanged because device did not confirm
+    assert coordinator.data["SN001"]["oac"] == 1
+
+
+async def test_device_refuses_command_echoes_different_state():
+    """Device echoes a different value than commanded — apply echoed state."""
+    coordinator = _make_coordinator()
+    switch = _make_switch("oac", coordinator=coordinator)
+    client = _mock_client(coordinator)
+    # Device refuses to turn off AC output, echoes oac=1
+    client.device.return_value.set_property = AsyncMock(return_value={"oac": 1})
+
+    assert switch.is_on is True
+    await switch.async_turn_off()
+    # State should reflect device's echo, not the commanded value
+    assert coordinator.data["SN001"]["oac"] == 1
 
 
 async def test_turn_on_config_switch():
     coordinator = _make_coordinator()
     switch = _make_switch("sfc", coordinator=coordinator)
-
-    # sfc starts at 1 (on) -- turn off then on
-    await switch.async_turn_off()
     client = _mock_client(coordinator)
-    client.device.return_value.set_property.assert_called_with("sfc", "off")
+    client.device.return_value.set_property = AsyncMock(return_value={"sfc": 0})
+
+    await switch.async_turn_off()
+    client.device.return_value.set_property.assert_called_with("sfc", "off", wait=True)
 
     client.device.reset_mock()
-    client.device.return_value.set_property = AsyncMock()
+    client.device.return_value.set_property = AsyncMock(return_value={"sfc": 1})
     await switch.async_turn_on()
-    client.device.return_value.set_property.assert_called_with("sfc", "on")
+    client.device.return_value.set_property.assert_called_with("sfc", "on", wait=True)
 
 
-async def test_turn_on_logs_error_and_skips_optimistic_on_mqtt_error():
+async def test_turn_on_logs_error_and_skips_update_on_mqtt_error():
     coordinator = _make_coordinator()
     switch = _make_switch("oac", coordinator=coordinator)
 
     client = _mock_client(coordinator)
     client.device.return_value.set_property.side_effect = MqttError("connection lost")
 
-    # oac starts at 1
     assert switch.is_on is True
-
-    # Should not raise
     await switch.async_turn_on()
-
-    # Optimistic update should NOT have been applied (still 1, not changed)
     assert coordinator.data["SN001"]["oac"] == 1
 
 
@@ -285,8 +301,6 @@ async def test_turn_on_handles_key_error():
     client.device.return_value.set_property.side_effect = KeyError("Unknown setting 'ac'")
 
     await switch.async_turn_on()
-
-    # Optimistic update should NOT have been applied
     assert coordinator.data["SN001"]["oac"] == 1
 
 
@@ -295,7 +309,6 @@ async def test_turn_on_noop_when_client_is_none():
     coordinator.client = None
     switch = _make_switch("oac", coordinator=coordinator)
 
-    # Should not raise
     await switch.async_turn_on()
 
 
@@ -304,7 +317,6 @@ async def test_turn_on_noop_when_device_not_found():
     switch = _make_switch("oac", coordinator=coordinator)
     _mock_client(coordinator).device.side_effect = KeyError("SN001")
 
-    # Should not raise - KeyError is caught and logged
     await switch.async_turn_on()
 
 
@@ -313,7 +325,6 @@ async def test_turn_on_noop_when_device_sn_not_found():
     switch = _make_switch("oac", coordinator=coordinator)
     _mock_client(coordinator).device.side_effect = KeyError("SN_UNKNOWN")
 
-    # Should not raise - KeyError is caught and logged
     await switch.async_turn_on()
 
 
