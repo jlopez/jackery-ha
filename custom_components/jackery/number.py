@@ -93,7 +93,6 @@ class JackeryNumberEntity(JackeryEntity, NumberEntity):  # type: ignore[misc]
         coordinator = self.coordinator
         sn = self._device_sn
         slug = self.entity_description.slug
-        prop_key = self.entity_description.property_key
 
         if coordinator.client is None:
             return
@@ -101,14 +100,22 @@ class JackeryNumberEntity(JackeryEntity, NumberEntity):  # type: ignore[misc]
         int_value = int(value)
         try:
             device = coordinator.client.device(sn)
-            await device.set_property(slug, int_value)
+            response = await device.set_property(slug, int_value, wait=True)
         except (KeyError, ValueError, MqttError) as err:
             _LOGGER.error("Failed to set %s=%s for device %s: %s", slug, int_value, sn, err)
             return
 
-        # Optimistic update: immediately reflect the expected state
+        if response is None:
+            _LOGGER.warning(
+                "Device %s did not confirm %s=%s within timeout; state unchanged",
+                sn,
+                slug,
+                int_value,
+            )
+            return
+
         if coordinator.data is not None and sn in coordinator.data:
-            coordinator.data[sn][prop_key] = int_value
+            coordinator.data[sn].update(response)
             coordinator.async_set_updated_data(coordinator.data)
 
 

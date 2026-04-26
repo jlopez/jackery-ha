@@ -48,7 +48,7 @@ def _make_coordinator(
         coordinator.data = {sn: dict(props) for sn, props in FAKE_DATA.items()}
     coordinator.devices = devices if devices is not None else list(FAKE_DEVICES)
     coordinator.client = MagicMock()
-    coordinator.client.device.return_value.set_property = AsyncMock()
+    coordinator.client.device.return_value.set_property = AsyncMock(return_value={})
     return coordinator
 
 
@@ -193,7 +193,7 @@ async def test_select_option_calls_set_property_with_slug():
 
     client = _mock_client(coordinator)
     client.device.assert_called_once_with("SN001")
-    client.device.return_value.set_property.assert_called_once_with("light", "high")
+    client.device.return_value.set_property.assert_called_once_with("light", "high", wait=True)
 
 
 async def test_select_option_routes_to_correct_device_sn():
@@ -204,19 +204,21 @@ async def test_select_option_routes_to_correct_device_sn():
 
     client = _mock_client(coordinator)
     client.device.assert_called_once_with("SN002")
-    client.device.return_value.set_property.assert_called_once_with("light", "sos")
+    client.device.return_value.set_property.assert_called_once_with("light", "sos", wait=True)
 
 
-async def test_select_option_applies_optimistic_update():
+async def test_select_option_applies_device_echo():
     coordinator = _make_coordinator()
     select = _make_select("lm", coordinator=coordinator)
+    client = _mock_client(coordinator)
+    client.device.return_value.set_property.return_value = {"lm": 2}
 
     # lm starts at 0 ("off")
     assert select.current_option == "off"
 
     await select.async_select_option("high")
 
-    # After select, optimistic update should set lm to 2 (index of "high")
+    # State reflects the device's echoed index
     assert coordinator.data["SN001"]["lm"] == 2
     assert select.current_option == "high"
 
@@ -224,28 +226,62 @@ async def test_select_option_applies_optimistic_update():
 async def test_select_option_charge_speed():
     coordinator = _make_coordinator()
     select = _make_select("cs", coordinator=coordinator)
+    client = _mock_client(coordinator)
+    client.device.return_value.set_property.return_value = {"cs": 0}
 
     await select.async_select_option("fast")
 
-    client = _mock_client(coordinator)
-    client.device.return_value.set_property.assert_called_once_with("charge-speed", "fast")
-    # Optimistic update: "fast" is index 0
+    client.device.return_value.set_property.assert_called_once_with(
+        "charge-speed", "fast", wait=True
+    )
     assert coordinator.data["SN001"]["cs"] == 0
 
 
 async def test_select_option_battery_protection():
     coordinator = _make_coordinator()
     select = _make_select("lps", coordinator=coordinator)
+    client = _mock_client(coordinator)
+    client.device.return_value.set_property.return_value = {"lps": 1}
 
     await select.async_select_option("eco")
 
-    client = _mock_client(coordinator)
-    client.device.return_value.set_property.assert_called_once_with("battery-protection", "eco")
-    # Optimistic update: "eco" is index 1
+    client.device.return_value.set_property.assert_called_once_with(
+        "battery-protection", "eco", wait=True
+    )
     assert coordinator.data["SN001"]["lps"] == 1
 
 
-async def test_select_option_logs_error_and_skips_optimistic_on_mqtt_error():
+async def test_select_option_reflects_device_refusal_via_echo():
+    """Device may echo a value different from the commanded option."""
+    coordinator = _make_coordinator()
+    select = _make_select("lps", coordinator=coordinator)
+    client = _mock_client(coordinator)
+    # Commanded "eco" (index 1) but device kept "full" (index 0)
+    client.device.return_value.set_property.return_value = {"lps": 0}
+
+    await select.async_select_option("eco")
+
+    # State remains "full" — what the device actually reports
+    assert coordinator.data["SN001"]["lps"] == 0
+    assert select.current_option == "full"
+
+
+async def test_select_option_skips_state_update_on_timeout():
+    coordinator = _make_coordinator()
+    select = _make_select("lm", coordinator=coordinator)
+    client = _mock_client(coordinator)
+    client.device.return_value.set_property.return_value = None
+
+    assert select.current_option == "off"
+
+    await select.async_select_option("high")
+
+    # No phantom state — original value preserved
+    assert coordinator.data["SN001"]["lm"] == 0
+    assert select.current_option == "off"
+
+
+async def test_select_option_logs_error_and_skips_state_update_on_mqtt_error():
     coordinator = _make_coordinator()
     select = _make_select("lm", coordinator=coordinator)
 
@@ -257,7 +293,7 @@ async def test_select_option_logs_error_and_skips_optimistic_on_mqtt_error():
 
     await select.async_select_option("high")
 
-    # Optimistic update should NOT have been applied
+    # State should NOT have been applied
     assert coordinator.data["SN001"]["lm"] == 0
     assert select.current_option == "off"
 
@@ -271,7 +307,7 @@ async def test_select_option_handles_key_error():
 
     await select.async_select_option("high")
 
-    # Optimistic update should NOT have been applied
+    # State should NOT have been applied
     assert coordinator.data["SN001"]["lm"] == 0
 
 
