@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.3.1](https://github.com/jlopez/jackery-ha/compare/v0.3.0...v0.3.1) (2026-04-29)
+
+
+### Bug Fixes
+
+* **switch:** wait for device confirmation instead of optimistic update ([#26](https://github.com/jlopez/jackery-ha/issues/26)) ([660e3d1](https://github.com/jlopez/jackery-ha/commit/660e3d16a445b3a335c6baf93e2340160c81312f))
+
 ## [0.3.0](https://github.com/jlopez/jackery-ha/compare/v0.2.1...v0.3.0) (2026-04-02)
 
 
